@@ -1,0 +1,9 @@
+/infra-discovery
+/infra-discovery.exe
+/out/
+/bin/
+*.test
+*.out
+.DS_Store
+.idea/
+.vscode/

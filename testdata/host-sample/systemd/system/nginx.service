@@ -1,0 +1,9 @@
+[Unit]
+Description=A high performance web server and a reverse proxy server
+ActiveState=active
+SubState=running
+UnitFileState=enabled
+
+[Service]
+Type=forking
+ExecStart=/usr/sbin/nginx

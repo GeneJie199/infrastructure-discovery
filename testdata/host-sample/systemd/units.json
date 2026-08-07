@@ -1,0 +1,34 @@
+{
+  "units": [
+    {
+      "name": "nginx.service",
+      "loadState": "loaded",
+      "activeState": "active",
+      "subState": "running",
+      "description": "A high performance web server and a reverse proxy server",
+      "fragmentPath": "/lib/systemd/system/nginx.service",
+      "unitFileState": "enabled",
+      "mainPID": 1200
+    },
+    {
+      "name": "ssh.service",
+      "loadState": "loaded",
+      "activeState": "active",
+      "subState": "running",
+      "description": "OpenBSD Secure Shell server",
+      "fragmentPath": "/lib/systemd/system/ssh.service",
+      "unitFileState": "enabled",
+      "mainPID": 800
+    },
+    {
+      "name": "cron.service",
+      "loadState": "loaded",
+      "activeState": "inactive",
+      "subState": "dead",
+      "description": "Regular background program processing daemon",
+      "fragmentPath": "/lib/systemd/system/cron.service",
+      "unitFileState": "enabled",
+      "mainPID": 0
+    }
+  ]
+}
