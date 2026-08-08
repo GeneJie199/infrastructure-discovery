@@ -1,0 +1,253 @@
+{
+  "collected_at": "2026-08-08T10:14:22+08:00",
+  "hostname": "shop-prod-api-01",
+  "summary": {
+    "hosts": 1,
+    "processes": 2,
+    "endpoints": 2,
+    "services": 3
+  },
+  "resources": [
+    {
+      "type": "endpoint",
+      "id": "endpoint:shop-prod-api-01/tcp/*/22",
+      "endpoint": {
+        "id": "endpoint:shop-prod-api-01/tcp/*/22",
+        "protocol": "tcp",
+        "address": "0.0.0.0",
+        "port": 22,
+        "process_id": 800,
+        "process_name": "sshd",
+        "process_user": "root",
+        "process_ref": "process:shop-prod-api-01/sshd/sshd",
+        "exposed_level": "public"
+      }
+    },
+    {
+      "type": "endpoint",
+      "id": "endpoint:shop-prod-api-01/tcp/*/80",
+      "endpoint": {
+        "id": "endpoint:shop-prod-api-01/tcp/*/80",
+        "protocol": "tcp",
+        "address": "0.0.0.0",
+        "port": 80,
+        "process_id": 1200,
+        "process_name": "nginx",
+        "process_user": "nginx",
+        "process_ref": "process:shop-prod-api-01/nginx@b7ca766ee1bd",
+        "exposed_level": "public"
+      }
+    },
+    {
+      "type": "host",
+      "id": "host:shop-prod-api-01",
+      "host": {
+        "id": "host:shop-prod-api-01",
+        "hostname": "shop-prod-api-01",
+        "os": "Ubuntu 24.04",
+        "kernel": "6.8.0-40-generic",
+        "architecture": "x86_64",
+        "cpu": {
+          "model": "Intel(R) Xeon(R) Platinum 8259CL CPU @ 2.50GHz",
+          "cores": 2
+        },
+        "memory": {
+          "total_bytes": 8153587712
+        },
+        "disks": [
+          {
+            "name": "sda",
+            "size_bytes": 107374182400,
+            "mount_point": "/",
+            "fs_type": "ext4"
+          },
+          {
+            "name": "nvme0n1",
+            "size_bytes": 214748364800,
+            "mount_point": "/data",
+            "fs_type": "ext4"
+          }
+        ],
+        "network_interfaces": [
+          {
+            "name": "eth0",
+            "mac": "06:2a:8b:3c:11:22",
+            "addresses": [
+              "10.0.1.25/24",
+              "fe80::42a:8bff:fe3c:1122/64"
+            ],
+            "state": "up"
+          },
+          {
+            "name": "eth1",
+            "mac": "06:2a:8b:3c:33:44",
+            "state": "down"
+          }
+        ],
+        "collected_at": "2026-08-08T10:14:22+08:00"
+      }
+    },
+    {
+      "type": "process",
+      "id": "process:shop-prod-api-01/nginx@b7ca766ee1bd",
+      "process": {
+        "id": "process:shop-prod-api-01/nginx@b7ca766ee1bd",
+        "pid": 1200,
+        "name": "nginx",
+        "executable": "/usr/sbin/nginx",
+        "command_line": "/usr/sbin/nginx -g daemon on;",
+        "working_directory": "/var/www",
+        "user": "nginx",
+        "parent_pid": 1
+      }
+    },
+    {
+      "type": "process",
+      "id": "process:shop-prod-api-01/sshd/sshd",
+      "process": {
+        "id": "process:shop-prod-api-01/sshd/sshd",
+        "pid": 800,
+        "name": "sshd",
+        "executable": "/usr/sbin/sshd",
+        "command_line": "/usr/sbin/sshd -D",
+        "working_directory": "/",
+        "user": "root",
+        "parent_pid": 1
+      }
+    },
+    {
+      "type": "service",
+      "id": "service:systemd:shop-prod-api-01/cron.service",
+      "service": {
+        "id": "service:systemd:shop-prod-api-01/cron.service",
+        "name": "cron.service",
+        "type": "service",
+        "deployment_type": "systemd",
+        "source": "systemd",
+        "active_state": "inactive",
+        "sub_state": "dead",
+        "exec_start": "/usr/sbin/cron -f",
+        "user": "root",
+        "description": "Regular background program processing daemon"
+      }
+    },
+    {
+      "type": "service",
+      "id": "service:systemd:shop-prod-api-01/nginx.service",
+      "service": {
+        "id": "service:systemd:shop-prod-api-01/nginx.service",
+        "name": "nginx.service",
+        "type": "service",
+        "deployment_type": "systemd",
+        "source": "systemd",
+        "active_state": "active",
+        "sub_state": "running",
+        "exec_start": "/usr/sbin/nginx -g 'daemon on; master_process on;'",
+        "working_directory": "/",
+        "user": "root",
+        "main_pid": 1200,
+        "description": "A high performance web server and a reverse proxy server"
+      }
+    },
+    {
+      "type": "service",
+      "id": "service:systemd:shop-prod-api-01/ssh.service",
+      "service": {
+        "id": "service:systemd:shop-prod-api-01/ssh.service",
+        "name": "ssh.service",
+        "type": "service",
+        "deployment_type": "systemd",
+        "source": "systemd",
+        "active_state": "active",
+        "sub_state": "running",
+        "exec_start": "/usr/sbin/sshd -D",
+        "user": "root",
+        "main_pid": 800,
+        "description": "OpenBSD Secure Shell server"
+      }
+    }
+  ],
+  "relationships": [
+    {
+      "source": "host:shop-prod-api-01",
+      "target": "endpoint:shop-prod-api-01/tcp/*/22",
+      "type": "listens_on",
+      "confidence": 1,
+      "evidence": [
+        "procfs:/proc/net"
+      ]
+    },
+    {
+      "source": "host:shop-prod-api-01",
+      "target": "endpoint:shop-prod-api-01/tcp/*/80",
+      "type": "listens_on",
+      "confidence": 1,
+      "evidence": [
+        "procfs:/proc/net"
+      ]
+    },
+    {
+      "source": "process:shop-prod-api-01/nginx@b7ca766ee1bd",
+      "target": "endpoint:shop-prod-api-01/tcp/*/80",
+      "type": "listens_on",
+      "confidence": 0.9,
+      "evidence": [
+        "socket inode mapped to pid 1200"
+      ]
+    },
+    {
+      "source": "process:shop-prod-api-01/sshd/sshd",
+      "target": "endpoint:shop-prod-api-01/tcp/*/22",
+      "type": "listens_on",
+      "confidence": 0.9,
+      "evidence": [
+        "socket inode mapped to pid 800"
+      ]
+    },
+    {
+      "source": "process:shop-prod-api-01/nginx@b7ca766ee1bd",
+      "target": "host:shop-prod-api-01",
+      "type": "runs_on",
+      "confidence": 1,
+      "evidence": [
+        "procfs"
+      ]
+    },
+    {
+      "source": "process:shop-prod-api-01/sshd/sshd",
+      "target": "host:shop-prod-api-01",
+      "type": "runs_on",
+      "confidence": 1,
+      "evidence": [
+        "procfs"
+      ]
+    },
+    {
+      "source": "service:systemd:shop-prod-api-01/cron.service",
+      "target": "host:shop-prod-api-01",
+      "type": "runs_on",
+      "confidence": 1,
+      "evidence": [
+        "systemctl"
+      ]
+    },
+    {
+      "source": "service:systemd:shop-prod-api-01/nginx.service",
+      "target": "host:shop-prod-api-01",
+      "type": "runs_on",
+      "confidence": 1,
+      "evidence": [
+        "systemctl"
+      ]
+    },
+    {
+      "source": "service:systemd:shop-prod-api-01/ssh.service",
+      "target": "host:shop-prod-api-01",
+      "type": "runs_on",
+      "confidence": 1,
+      "evidence": [
+        "systemctl"
+      ]
+    }
+  ]
+}

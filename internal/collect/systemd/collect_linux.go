@@ -45,6 +45,15 @@ func Collect() ([]Unit, error) {
 		if show.SubState != "" {
 			units[i].SubState = show.SubState
 		}
+		if show.ExecStart != "" {
+			units[i].ExecStart = show.ExecStart
+		}
+		if show.WorkingDirectory != "" {
+			units[i].WorkingDirectory = show.WorkingDirectory
+		}
+		if show.User != "" {
+			units[i].User = show.User
+		}
 	}
 	return units, nil
 }
@@ -82,7 +91,7 @@ func parseListUnits(out []byte) ([]Unit, error) {
 func showUnit(name string) (*Unit, error) {
 	cmd := exec.Command(
 		"systemctl", "show", name,
-		"--property=Description,FragmentPath,UnitFileState,MainPID,SubState,ActiveState,LoadState",
+		"--property=Description,FragmentPath,UnitFileState,MainPID,SubState,ActiveState,LoadState,ExecStart,WorkingDirectory,User",
 		"--no-pager",
 	)
 	out, err := cmd.Output()
@@ -112,6 +121,12 @@ func showUnit(name string) (*Unit, error) {
 			u.ActiveState = v
 		case "LoadState":
 			u.LoadState = v
+		case "ExecStart":
+			u.ExecStart = v
+		case "WorkingDirectory":
+			u.WorkingDirectory = v
+		case "User":
+			u.User = v
 		}
 	}
 	return u, nil

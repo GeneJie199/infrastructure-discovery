@@ -1,4 +1,4 @@
-{
+﻿{
   "units": [
     {
       "name": "nginx.service",
@@ -9,7 +9,7 @@
       "fragmentPath": "/lib/systemd/system/nginx.service",
       "unitFileState": "enabled",
       "mainPID": 1200,
-      "execStart": "/usr/sbin/nginx -g 'daemon on; master_process on;'",
+      "execStart": "/opt/nginx/sbin/nginx -g daemon on;",
       "workingDirectory": "/",
       "user": "root"
     },
@@ -26,15 +26,16 @@
       "user": "root"
     },
     {
-      "name": "cron.service",
+      "name": "mall-api.service",
       "loadState": "loaded",
-      "activeState": "inactive",
-      "subState": "dead",
-      "description": "Regular background program processing daemon",
-      "fragmentPath": "/lib/systemd/system/cron.service",
+      "activeState": "active",
+      "subState": "running",
+      "description": "Mall API",
+      "fragmentPath": "/etc/systemd/system/mall-api.service",
       "unitFileState": "enabled",
-      "mainPID": 0,
-      "execStart": "/usr/sbin/cron -f",
+      "mainPID": 2100,
+      "execStart": "/opt/api/v2/server",
+      "workingDirectory": "/opt/api/v2",
       "user": "root"
     }
   ]

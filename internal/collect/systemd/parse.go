@@ -11,14 +11,17 @@ import (
 
 // Unit is a systemd service (or other unit type) observation.
 type Unit struct {
-	Name        string `json:"name"`
-	LoadState   string `json:"loadState"`
-	ActiveState string `json:"activeState"`
-	SubState    string `json:"subState"`
-	Description string `json:"description,omitempty"`
-	FragmentPath string `json:"fragmentPath,omitempty"`
-	UnitFileState string `json:"unitFileState,omitempty"`
-	MainPID     int    `json:"mainPID,omitempty"`
+	Name             string `json:"name"`
+	LoadState        string `json:"loadState"`
+	ActiveState      string `json:"activeState"`
+	SubState         string `json:"subState"`
+	Description      string `json:"description,omitempty"`
+	FragmentPath     string `json:"fragmentPath,omitempty"`
+	UnitFileState    string `json:"unitFileState,omitempty"`
+	MainPID          int    `json:"mainPID,omitempty"`
+	ExecStart        string `json:"execStart,omitempty"`
+	WorkingDirectory string `json:"workingDirectory,omitempty"`
+	User             string `json:"user,omitempty"`
 }
 
 // ParseUnitsJSON reads a systemctl show / list-units style JSON fixture:
@@ -28,6 +31,9 @@ func ParseUnitsJSON(path string) ([]Unit, error) {
 	b, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
+	}
+	if len(b) >= 3 && b[0] == 0xEF && b[1] == 0xBB && b[2] == 0xBF {
+		b = b[3:]
 	}
 	var payload struct {
 		Units []Unit `json:"units"`
@@ -96,6 +102,12 @@ func parseUnitFile(path, name string) (*Unit, error) {
 			u.SubState = v
 		case "UnitFileState":
 			u.UnitFileState = v
+		case "ExecStart":
+			u.ExecStart = v
+		case "WorkingDirectory":
+			u.WorkingDirectory = v
+		case "User":
+			u.User = v
 		}
 	}
 	return u, nil

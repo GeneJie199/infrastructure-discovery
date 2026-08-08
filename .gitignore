@@ -1,6 +1,9 @@
 /infra-discovery
 /infra-discovery.exe
+/infrascout
+/infrascout.exe
 /out/
+/out-demo/
 /bin/
 *.test
 *.out
