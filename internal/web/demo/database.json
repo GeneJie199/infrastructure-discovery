@@ -1,0 +1,64 @@
+{
+  "version": "infrascout.database/v1",
+  "engine": "postgresql",
+  "collected_at": "2026-08-12T09:36:56+08:00",
+  "server_version": "PostgreSQL 16.4",
+  "schemas": [
+    {
+      "name": "public",
+      "tables": [
+        {
+          "schema": "public",
+          "name": "orders",
+          "columns": [
+            {"name": "id", "data_type": "uuid", "nullable": false},
+            {"name": "customer_id", "data_type": "uuid", "nullable": false},
+            {"name": "status", "data_type": "text", "nullable": false, "default": "'pending'::text"},
+            {"name": "created_at", "data_type": "timestamp with time zone", "nullable": false, "default": "now()"}
+          ]
+        },
+        {
+          "schema": "public",
+          "name": "customers",
+          "columns": [
+            {"name": "id", "data_type": "uuid", "nullable": false},
+            {"name": "email", "data_type": "text", "nullable": false},
+            {"name": "display_name", "data_type": "text", "nullable": true}
+          ]
+        }
+      ]
+    },
+    {
+      "name": "audit",
+      "tables": [
+        {
+          "schema": "audit",
+          "name": "change_log",
+          "columns": [
+            {"name": "id", "data_type": "bigint", "nullable": false},
+            {"name": "resource", "data_type": "text", "nullable": false},
+            {"name": "payload", "data_type": "jsonb", "nullable": false}
+          ]
+        }
+      ]
+    }
+  ],
+  "indexes": [
+    {"schema": "public", "name": "orders_pkey", "type": "orders", "detail": "CREATE UNIQUE INDEX orders_pkey ON public.orders USING btree (id)"},
+    {"schema": "public", "name": "customers_email_key", "type": "customers", "detail": "CREATE UNIQUE INDEX customers_email_key ON public.customers USING btree (email)"}
+  ],
+  "views": [
+    {"schema": "public", "name": "open_orders", "type": "VIEW", "detail": "SELECT id, customer_id FROM orders WHERE status = 'pending'"}
+  ],
+  "triggers": [
+    {"schema": "public", "name": "orders_audit", "type": "INSERT", "detail": "orders"}
+  ],
+  "routines": [
+    {"schema": "public", "name": "close_order", "type": "FUNCTION", "detail": "void"}
+  ],
+  "privileges": [
+    {"schema": "app_reader", "name": "SELECT", "type": "public", "detail": "orders"},
+    {"schema": "app_writer", "name": "INSERT", "type": "public", "detail": "orders"}
+  ],
+  "warnings": []
+}

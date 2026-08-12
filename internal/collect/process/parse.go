@@ -28,6 +28,9 @@ type Info struct {
 // Optional {root}/passwd maps UIDs to usernames (passwd-like lines).
 func ParseFromRoot(root string) ([]Info, error) {
 	users := loadPasswd(filepath.Join(root, "passwd"))
+	if len(users) == 0 {
+		users = loadPasswd(filepath.Join(root, "etc", "passwd"))
+	}
 	bootTime, err := parseBootTime(filepath.Join(root, "proc", "stat"))
 	if err != nil {
 		// Fixtures may omit boot time; default to Unix epoch for determinism in tests.

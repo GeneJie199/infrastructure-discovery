@@ -46,7 +46,7 @@ func TestCompare_FiltersPIDAndStartedAt(t *testing.T) {
 				ResourceType: "process.bin",
 				DisplayName:  "nginx",
 				Attributes: map[string]any{
-					"pid":       9999, // noise
+					"pid":       9999,                   // noise
 					"startedAt": "2026-08-07T14:00:00Z", // noise
 					"exe":       "/usr/sbin/nginx",
 					"user":      "nginx",

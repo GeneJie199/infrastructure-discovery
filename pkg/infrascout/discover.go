@@ -2,21 +2,28 @@ package infrascout
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
 
+	"github.com/GeneJie199/infrastructure-discovery/internal/collect/docker"
 	"github.com/GeneJie199/infrastructure-discovery/internal/collect/host"
 	"github.com/GeneJie199/infrastructure-discovery/internal/collect/net"
 	"github.com/GeneJie199/infrastructure-discovery/internal/collect/process"
 	"github.com/GeneJie199/infrastructure-discovery/internal/collect/systemd"
+	"github.com/GeneJie199/infrastructure-discovery/internal/configscan"
 	"github.com/GeneJie199/infrastructure-discovery/internal/errs"
+	"github.com/GeneJie199/infrastructure-discovery/internal/redact"
 )
 
 // ScanOptions configures discovery.
 type ScanOptions struct {
 	// FixtureRoot reads a fake proc/systemd tree (for tests / non-Linux).
 	FixtureRoot string
+	// NginxRoot overrides the nginx configuration directory. Defaults to /etc/nginx on live Linux.
+	NginxRoot string
 }
 
 // ScanResult holds both inventory and snapshot from one discovery pass.
@@ -30,28 +37,31 @@ func Discover(opts ScanOptions) (*ScanResult, error) {
 	now := time.Now()
 	at := FormatTime(now)
 
-	h, procs, listeners, units, err := gather(opts.FixtureRoot)
+	h, procs, listeners, units, containers, warnings, err := gather(opts.FixtureRoot)
 	if err != nil {
 		return nil, err
 	}
 
 	hostname := h.Hostname
 	hostID := HostID(hostname)
+	excludedPIDs := currentProcessTreePIDs(procs, os.Getpid())
+	procs = excludeProcesses(procs, excludedPIDs)
+	listeners = excludeListeners(listeners, excludedPIDs)
 
 	hostRes := Resource{
 		Type: "host",
 		ID:   hostID,
 		Host: &Host{
-			ID:           hostID,
-			Hostname:     hostname,
-			OS:           fmt.Sprintf("%s %s", h.OSName, h.OSVersion),
-			Kernel:       h.Kernel,
-			Architecture: h.Arch,
-			CPU:          CPUInfo{Model: h.CPUModel, Cores: h.CPUCores},
-			Memory:       MemoryInfo{TotalBytes: h.MemoryBytes},
-			Disks:        mapDisks(h.Disks),
+			ID:                hostID,
+			Hostname:          hostname,
+			OS:                fmt.Sprintf("%s %s", h.OSName, h.OSVersion),
+			Kernel:            h.Kernel,
+			Architecture:      h.Arch,
+			CPU:               CPUInfo{Model: h.CPUModel, Cores: h.CPUCores},
+			Memory:            MemoryInfo{TotalBytes: h.MemoryBytes},
+			Disks:             mapDisks(h.Disks),
 			NetworkInterfaces: mapNICs(h.NICs),
-			CollectedAt:  at,
+			CollectedAt:       at,
 		},
 	}
 
@@ -72,7 +82,7 @@ func Discover(opts ScanOptions) (*ScanResult, error) {
 			PID:              p.PID,
 			Name:             p.Comm,
 			Executable:       p.Exe,
-			CommandLine:      p.Cmdline,
+			CommandLine:      redact.CommandLine(p.Cmdline),
 			WorkingDirectory: p.Cwd,
 			User:             p.User,
 			ParentPID:        p.PPID,
@@ -143,7 +153,7 @@ func Discover(opts ScanOptions) (*ScanResult, error) {
 			Source:           "systemd",
 			ActiveState:      u.ActiveState,
 			SubState:         u.SubState,
-			ExecStart:        u.ExecStart,
+			ExecStart:        redact.CommandLine(u.ExecStart),
 			WorkingDirectory: u.WorkingDirectory,
 			User:             u.User,
 			MainPID:          u.MainPID,
@@ -157,6 +167,61 @@ func Discover(opts ScanOptions) (*ScanResult, error) {
 			Confidence: 1.0,
 			Evidence:   []string{"systemctl"},
 		})
+	}
+
+	for _, c := range containers {
+		sid := ContainerID(hostname, c.Name)
+		svc := &Service{
+			ID: sid, Name: c.Name, Type: "container", DeploymentType: DeployDocker,
+			Source: "docker", ActiveState: c.State, SubState: c.Status,
+			ExecStart: redact.CommandLine(c.Command), ContainerID: c.ID,
+			Image: c.Image, Status: c.Status, Ports: c.Ports,
+			ComposeProject: composeProject(c.Labels),
+			Health:         c.Health, RestartCount: c.RestartCount, Networks: c.Networks,
+		}
+		for _, m := range c.Mounts {
+			svc.Mounts = append(svc.Mounts, ContainerMount{Type: m.Type, Source: m.Source, Destination: m.Destination, Mode: m.Mode})
+		}
+		resources = append(resources, Resource{Type: "service", ID: sid, Service: svc})
+		rels = append(rels, Relationship{
+			Source: sid, Target: hostID, Type: "runs_on", Confidence: 1.0,
+			Evidence: []string{"docker ps"},
+		})
+		for _, name := range c.Networks {
+			nid := DockerNetworkID(hostname, name)
+			resources = append(resources, Resource{Type: "docker.network", ID: nid, Metadata: map[string]any{"name": name}})
+			rels = append(rels, Relationship{Source: sid, Target: nid, Type: "connected_to", Confidence: 1, Evidence: []string{"docker inspect"}})
+		}
+		for _, mount := range c.Mounts {
+			vid := DockerVolumeID(hostname, mount.Source)
+			resources = append(resources, Resource{Type: "docker.volume", ID: vid, Metadata: map[string]any{"type": mount.Type, "source": mount.Source, "destination": mount.Destination, "mode": mount.Mode}})
+			rels = append(rels, Relationship{Source: sid, Target: vid, Type: "mounts", Confidence: 1, Evidence: []string{"docker inspect"}})
+		}
+	}
+
+	nginxRoot := opts.NginxRoot
+	if nginxRoot == "" {
+		if opts.FixtureRoot != "" {
+			nginxRoot = filepath.Join(opts.FixtureRoot, "nginx")
+		} else {
+			nginxRoot = "/etc/nginx"
+		}
+	}
+	nginxRoutes := []NginxRoute{}
+	if routes, nginxWarnings, nginxErr := configscan.ParseNginx(nginxRoot); nginxErr != nil {
+		warnings = append(warnings, "nginx config: "+nginxErr.Error())
+	} else {
+		for _, route := range routes {
+			clean := NginxRoute{SourceFile: route.SourceFile, ServerName: route.ServerName, Listen: route.Listen, Location: route.Location, Upstream: redact.CommandLine(route.Upstream)}
+			nginxRoutes = append(nginxRoutes, clean)
+			routeID := NginxRouteID(hostname, clean.SourceFile, clean.ServerName, clean.Listen, clean.Location)
+			resources = append(resources, Resource{Type: "nginx.route", ID: routeID, Metadata: map[string]any{
+				"source_file": clean.SourceFile, "server_name": clean.ServerName, "listen": clean.Listen,
+				"location": clean.Location, "upstream": clean.Upstream,
+			}})
+			rels = append(rels, Relationship{Source: routeID, Target: hostID, Type: "configured_on", Confidence: 1, Evidence: []string{clean.SourceFile}})
+		}
+		warnings = append(warnings, nginxWarnings...)
 	}
 
 	resources = dedupeResources(resources)
@@ -182,6 +247,12 @@ func Discover(opts ScanOptions) (*ScanResult, error) {
 			sum.Endpoints++
 		case "service":
 			sum.Services++
+		case "docker.network":
+			sum.Networks++
+		case "docker.volume":
+			sum.Volumes++
+		case "nginx.route":
+			sum.Routes++
 		}
 	}
 
@@ -191,55 +262,118 @@ func Discover(opts ScanOptions) (*ScanResult, error) {
 		Summary:       sum,
 		Resources:     resources,
 		Relationships: rels,
+		Warnings:      warnings,
+		NginxRoutes:   nginxRoutes,
 	}
+	AnalyzeInventory(&inv)
 	snap := Snapshot{
 		Timestamp:     at,
 		Hostname:      hostname,
 		Resources:     cloneResourcesForSnapshot(resources),
 		Relationships: rels,
 		NoiseFields:   DefaultNoiseFields(),
+		Warnings:      warnings,
 	}
 
 	return &ScanResult{Inventory: inv, Snapshot: snap}, nil
 }
 
-func gather(fixture string) (*host.Info, []process.Info, []net.Listener, []systemd.Unit, error) {
+func gather(fixture string) (*host.Info, []process.Info, []net.Listener, []systemd.Unit, []docker.Container, []string, error) {
 	if fixture != "" {
 		h, err := host.ParseFromRoot(fixture)
 		if err != nil {
-			return nil, nil, nil, nil, err
+			return nil, nil, nil, nil, nil, nil, err
 		}
 		procs, err := process.ParseFromRoot(fixture)
 		if err != nil {
-			return nil, nil, nil, nil, err
+			return nil, nil, nil, nil, nil, nil, err
 		}
 		listeners, err := net.ParseFromRoot(fixture)
 		if err != nil {
-			return nil, nil, nil, nil, err
+			return nil, nil, nil, nil, nil, nil, err
 		}
 		units, err := systemd.ParseFromRoot(fixture)
 		if err != nil {
-			return nil, nil, nil, nil, err
+			return nil, nil, nil, nil, nil, nil, err
 		}
-		return h, procs, listeners, units, nil
+		return h, procs, listeners, units, nil, nil, nil
 	}
 	h, err := host.Collect()
 	if err != nil {
-		return nil, nil, nil, nil, err
+		return nil, nil, nil, nil, nil, nil, err
 	}
 	procs, err := process.Collect()
 	if err != nil {
-		return nil, nil, nil, nil, err
+		return nil, nil, nil, nil, nil, nil, err
 	}
 	listeners, err := net.Collect()
 	if err != nil {
-		return nil, nil, nil, nil, err
+		return nil, nil, nil, nil, nil, nil, err
 	}
 	units, err := systemd.Collect()
 	if err != nil {
-		return nil, nil, nil, nil, err
+		return nil, nil, nil, nil, nil, nil, err
 	}
-	return h, procs, listeners, units, nil
+	containers, dockerErr := docker.Collect()
+	var warnings []string
+	if dockerErr != nil {
+		warnings = append(warnings, dockerErr.Error())
+	}
+	return h, procs, listeners, units, containers, warnings, nil
+}
+
+func composeProject(labels string) string {
+	for _, label := range strings.Split(labels, ",") {
+		key, value, ok := strings.Cut(strings.TrimSpace(label), "=")
+		if ok && key == "com.docker.compose.project" {
+			return value
+		}
+	}
+	return ""
+}
+
+func currentProcessTreePIDs(procs []process.Info, pid int) map[int]struct{} {
+	byPID := make(map[int]process.Info, len(procs))
+	for _, proc := range procs {
+		byPID[proc.PID] = proc
+	}
+	excluded := map[int]struct{}{}
+	for pid > 1 {
+		proc, ok := byPID[pid]
+		if !ok {
+			break
+		}
+		excluded[pid] = struct{}{}
+		pid = proc.PPID
+	}
+	return excluded
+}
+
+func excludeProcesses(procs []process.Info, excluded map[int]struct{}) []process.Info {
+	result := make([]process.Info, 0, len(procs))
+	for _, proc := range procs {
+		if _, skip := excluded[proc.PID]; skip {
+			continue
+		}
+		// Kernel worker threads churn constantly and do not represent deployed
+		// application state. They are children of kthreadd (PID 2) and have no
+		// userspace command line.
+		if proc.PID == 2 || (proc.PPID == 2 && proc.Cmdline == "") {
+			continue
+		}
+		result = append(result, proc)
+	}
+	return result
+}
+
+func excludeListeners(listeners []net.Listener, excluded map[int]struct{}) []net.Listener {
+	result := make([]net.Listener, 0, len(listeners))
+	for _, listener := range listeners {
+		if _, skip := excluded[listener.PID]; !skip {
+			result = append(result, listener)
+		}
+	}
+	return result
 }
 
 // ErrUnsupported is returned on non-Linux without --fixture.

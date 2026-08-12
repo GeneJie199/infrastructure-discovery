@@ -22,7 +22,7 @@ func FormatHuman(w io.Writer, report DiffReport) {
 		fmt.Fprintln(w, "  (none)")
 	} else {
 		for _, a := range report.Added {
-			fmt.Fprintf(w, "  + [%s] %s\n", a.Severity, a.Summary)
+			fmt.Fprintf(w, "  + [%s/%s] %s (%s)\n", a.Severity, a.Classification, a.Summary, a.Fingerprint)
 		}
 	}
 	fmt.Fprintln(w)
@@ -32,7 +32,7 @@ func FormatHuman(w io.Writer, report DiffReport) {
 		fmt.Fprintln(w, "  (none)")
 	} else {
 		for _, r := range report.Removed {
-			fmt.Fprintf(w, "  - [%s] %s\n", r.Severity, r.Summary)
+			fmt.Fprintf(w, "  - [%s/%s] %s (%s)\n", r.Severity, r.Classification, r.Summary, r.Fingerprint)
 		}
 	}
 	fmt.Fprintln(w)
@@ -42,7 +42,7 @@ func FormatHuman(w io.Writer, report DiffReport) {
 		fmt.Fprintln(w, "  (none)")
 	} else {
 		for _, c := range report.Changed {
-			fmt.Fprintf(w, "  ~ [%s] %s\n", c.Severity, c.Summary)
+			fmt.Fprintf(w, "  ~ [%s/%s] %s (%s)\n", c.Severity, c.Classification, c.Summary, c.Fingerprint)
 			for k, v := range c.Before {
 				fmt.Fprintf(w, "      before.%s = %v\n", k, v)
 			}
@@ -54,6 +54,7 @@ func FormatHuman(w io.Writer, report DiffReport) {
 	fmt.Fprintln(w)
 
 	fmt.Fprintf(w, "Risk: %s\n", report.HighestRisk)
+	fmt.Fprintf(w, "Blocking risk: %s\n", report.BlockingRisk)
 	for _, a := range report.Added {
 		if a.Severity == SeverityCritical {
 			fmt.Fprintf(w, "  CRITICAL  %s\n", a.Summary)

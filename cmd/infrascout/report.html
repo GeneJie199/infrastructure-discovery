@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+  <title>InfraScout 离线报告</title>
+  <style>
+    *{box-sizing:border-box}body{margin:0;background:#f1f4f2;color:#17201c;font:14px/1.5 system-ui,"Microsoft YaHei",sans-serif}header{background:#14251e;color:#fff;padding:24px max(20px,calc((100% - 1100px)/2));border-bottom:4px solid #d1aa3a}header h1{margin:0;font-size:25px;letter-spacing:0}header div{color:#b9c8c0;margin-top:4px}main{max-width:1100px;margin:auto;padding:24px}.metrics{display:grid;grid-template-columns:repeat(4,1fr);background:#fff;border:1px solid #ccd5d0}.metric{padding:15px;border-right:1px solid #ccd5d0}.metric:last-child{border:0}.metric b{font-size:23px;display:block}section{margin-top:25px}.table-wrap{overflow:auto;border:1px solid #ccd5d0;background:#fff}table{width:100%;border-collapse:collapse;white-space:nowrap}th,td{text-align:left;padding:9px 11px;border-bottom:1px solid #e3e8e5}th{color:#67736d;font-size:11px;background:#f7f9f8}.risk{font-weight:800;padding:12px;background:#fff;border-left:4px solid #8b9690}.risk.CRITICAL{color:#b6352e;border-color:#b6352e}.risk.WARNING{color:#946200;border-color:#c28c24}.empty{color:#67736d;text-align:center}@media(max-width:650px){.metrics{grid-template-columns:1fr 1fr}.metric:nth-child(2){border-right:0}.metric:nth-child(-n+2){border-bottom:1px solid #ccd5d0}main{padding:14px}header{padding:18px 14px}}
+  </style>
+</head>
+<body>
+  <header><h1>InfraScout 离线报告</h1><div id="time"></div></header>
+  <main><div id="app"></div></main>
+  <script type="application/json" id="inventory">{{.Inventory}}</script>
+  <script type="application/json" id="drift">{{.Drift}}</script>
+  <script>
+    (() => {
+      "use strict";
+      const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[char]);
+      const inventory = JSON.parse(document.querySelector("#inventory").textContent || "null") || {};
+      const drift = JSON.parse(document.querySelector("#drift").textContent || "null") || {};
+      document.querySelector("#time").textContent = inventory.collected_at || "";
+      const summary = inventory.summary || {};
+      const risk = ["CRITICAL", "WARNING", "INFO"].includes(drift.highest_risk) ? drift.highest_risk : "";
+      const serviceRows = (inventory.detected_services || []).map((item) => `<tr><td>${esc(item.kind)}</td><td>${esc(item.name)}</td><td>${esc(item.source)}</td><td>${esc(Math.round(Number(item.confidence || 0) * 100))}%</td></tr>`).join("");
+      const recommendations = ((inventory.monitoring_plan || {}).recommendations || []).map((item) => `<tr><td>${esc(item.priority)}</td><td>${esc(item.collector)}</td><td>${esc(item.reason)}</td></tr>`).join("");
+      document.querySelector("#app").innerHTML =
+        `<div class="metrics">${[["主机",summary.hosts],["进程",summary.processes],["监听端口",summary.endpoints],["服务",summary.services]].map((item) => `<div class="metric"><b>${esc(item[1] ?? 0)}</b>${esc(item[0])}</div>`).join("")}</div>` +
+        `<section><h2>漂移结论</h2><p class="risk ${risk}">${esc(drift.highest_risk || "尚无漂移报告")}</p></section>` +
+        `<section><h2>识别到的服务</h2><div class="table-wrap"><table><thead><tr><th>类型</th><th>名称</th><th>来源</th><th>置信度</th></tr></thead><tbody>${serviceRows || '<tr><td colspan="4" class="empty">没有识别到服务</td></tr>'}</tbody></table></div></section>` +
+        `<section><h2>监控建议</h2><div class="table-wrap"><table><thead><tr><th>优先级</th><th>采集器</th><th>原因</th></tr></thead><tbody>${recommendations || '<tr><td colspan="3" class="empty">没有监控建议</td></tr>'}</tbody></table></div></section>`;
+    })();
+  </script>
+</body>
+</html>

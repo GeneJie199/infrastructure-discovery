@@ -45,6 +45,23 @@ func ServiceID(hostname, name string) string {
 	return fmt.Sprintf("service:systemd:%s/%s", hostname, name)
 }
 
+func ContainerID(hostname, name string) string {
+	return fmt.Sprintf("service:docker:%s/%s", hostname, strings.TrimPrefix(strings.TrimSpace(name), "/"))
+}
+func DockerNetworkID(hostname, name string) string {
+	return fmt.Sprintf("docker.network:%s/%s", hostname, normalizePath(name))
+}
+func DockerVolumeID(hostname, source string) string {
+	sum := sha1.Sum([]byte(source))
+	return fmt.Sprintf("docker.volume:%s/%s", hostname, hex.EncodeToString(sum[:8]))
+}
+
+func NginxRouteID(hostname, sourceFile, serverName, listen, location string) string {
+	identity := strings.Join([]string{normalizePath(sourceFile), serverName, listen, location}, "\x00")
+	sum := sha1.Sum([]byte(identity))
+	return fmt.Sprintf("nginx.route:%s/%s", hostname, hex.EncodeToString(sum[:8]))
+}
+
 func normalizePath(p string) string {
 	p = strings.TrimSpace(p)
 	p = strings.ReplaceAll(p, "\\", "/")

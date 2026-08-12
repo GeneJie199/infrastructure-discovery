@@ -34,6 +34,7 @@ func Compare(baseline, candidate Snapshot) DiffReport {
 		br, ok := baseIdx[id]
 		if !ok {
 			item := classifyAdded(cr)
+			item.After = comparableMap(cr, noiseSet)
 			report.Added = append(report.Added, item)
 			continue
 		}
@@ -59,7 +60,9 @@ func Compare(baseline, candidate Snapshot) DiffReport {
 		if _, ok := candIdx[id]; ok {
 			continue
 		}
-		report.Removed = append(report.Removed, classifyRemoved(br))
+		item := classifyRemoved(br)
+		item.Before = comparableMap(br, noiseSet)
+		report.Removed = append(report.Removed, item)
 	}
 
 	report.HighestRisk = highest(
@@ -88,6 +91,11 @@ func comparableMap(r Resource, noise map[string]struct{}) map[string]any {
 
 func resourceAttrs(r Resource) map[string]any {
 	m := map[string]any{}
+	if r.Metadata != nil {
+		for k, v := range r.Metadata {
+			m[k] = v
+		}
+	}
 	switch r.Type {
 	case "host":
 		if r.Host == nil {
@@ -140,6 +148,15 @@ func resourceAttrs(r Resource) map[string]any {
 		m["working_directory"] = s.WorkingDirectory
 		m["user"] = s.User
 		m["main_pid"] = s.MainPID
+		m["container_id"] = s.ContainerID
+		m["image"] = s.Image
+		m["status"] = s.Status
+		m["ports"] = s.Ports
+		m["compose_project"] = s.ComposeProject
+		m["health"] = s.Health
+		m["restart_count"] = s.RestartCount
+		m["networks"] = s.Networks
+		m["mounts"] = s.Mounts
 	}
 	return m
 }

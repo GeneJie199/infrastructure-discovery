@@ -1,0 +1,61 @@
+{
+  "compared_at": "2026-08-08T10:14:23+08:00",
+  "baseline_timestamp": "2026-08-08T10:14:22+08:00",
+  "candidate_timestamp": "2026-08-08T10:14:23+08:00",
+  "added": [
+    {
+      "id": "endpoint:shop-prod-api-01/tcp/*/8080",
+      "type": "endpoint",
+      "summary": "A new root process exposes port 8080",
+      "severity": "CRITICAL"
+    },
+    {
+      "id": "process:shop-prod-api-01/mall-api@c96deba15fc0",
+      "type": "process",
+      "summary": "added process /opt/api/v2/server",
+      "severity": "INFO"
+    },
+    {
+      "id": "service:systemd:shop-prod-api-01/mall-api.service",
+      "type": "service",
+      "summary": "added service mall-api.service",
+      "severity": "WARNING"
+    }
+  ],
+  "removed": [
+    {
+      "id": "service:systemd:shop-prod-api-01/cron.service",
+      "type": "service",
+      "summary": "systemd service disappeared: cron.service",
+      "severity": "WARNING"
+    }
+  ],
+  "changed": [
+    {
+      "id": "service:systemd:shop-prod-api-01/nginx.service",
+      "type": "service",
+      "summary": "nginx.service: exec_start changed",
+      "severity": "WARNING",
+      "before": {
+        "exec_start": "/usr/sbin/nginx -g 'daemon on; master_process on;'"
+      },
+      "after": {
+        "exec_start": "/opt/nginx/sbin/nginx -g daemon on;"
+      }
+    },
+    {
+      "id": "process:shop-prod-api-01/nginx@b7ca766ee1bd",
+      "type": "process",
+      "summary": "/opt/nginx/sbin/nginx: executable changed",
+      "severity": "WARNING",
+      "before": {
+        "executable": "/usr/sbin/nginx"
+      },
+      "after": {
+        "executable": "/opt/nginx/sbin/nginx"
+      }
+    }
+  ],
+  "highest_risk": "CRITICAL",
+  "unchanged_count": 5
+}

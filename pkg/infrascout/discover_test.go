@@ -39,8 +39,22 @@ func TestDiscoverHostSample(t *testing.T) {
 	if res.Inventory.Summary.Services < 2 {
 		t.Fatalf("services=%d", res.Inventory.Summary.Services)
 	}
+	if len(res.Inventory.NginxRoutes) != 1 || res.Inventory.NginxRoutes[0].Upstream != "http://127.0.0.1:8080" {
+		t.Fatalf("nginx routes=%+v", res.Inventory.NginxRoutes)
+	}
+	if res.Inventory.Summary.Routes != 1 {
+		t.Fatalf("nginx route resources=%d", res.Inventory.Summary.Routes)
+	}
+	if len(res.Inventory.Monitoring.Recommendations) < 2 {
+		t.Fatalf("monitoring plan=%+v", res.Inventory.Monitoring)
+	}
+	for _, recommendation := range res.Inventory.Monitoring.Recommendations {
+		if !strings.HasPrefix(recommendation.Collector, "fleetscope/") {
+			t.Fatalf("monitoring plan must use native FleetScope collectors, got %q", recommendation.Collector)
+		}
+	}
 
-	foundHost := false
+	foundHost, foundRoute := false, false
 	for _, r := range res.Snapshot.Resources {
 		if strings.Contains(r.ID, "process:") && strings.Contains(r.ID, "1200") {
 			t.Fatalf("stable process id must not embed PID: %s", r.ID)
@@ -49,6 +63,12 @@ func TestDiscoverHostSample(t *testing.T) {
 			foundHost = true
 			if r.Host == nil || r.Host.Kernel == "" {
 				t.Fatal("host kernel missing")
+			}
+		}
+		if r.Type == "nginx.route" {
+			foundRoute = true
+			if r.Metadata["upstream"] != "http://127.0.0.1:8080" {
+				t.Fatalf("route metadata=%+v", r.Metadata)
 			}
 		}
 		if r.Type == "endpoint" && r.Endpoint != nil && r.Endpoint.Port == 80 {
@@ -62,6 +82,9 @@ func TestDiscoverHostSample(t *testing.T) {
 	}
 	if !foundHost {
 		t.Fatal("missing host")
+	}
+	if !foundRoute {
+		t.Fatal("missing nginx route in snapshot")
 	}
 	if len(res.Snapshot.Relationships) == 0 {
 		t.Fatal("expected relationships")
@@ -148,5 +171,20 @@ func TestProcessIDStableWithoutPID(t *testing.T) {
 	}
 	if strings.Contains(a, "1234") {
 		t.Fatal(a)
+	}
+}
+
+func TestDiffCarriesEvidenceForAddedAndRemovedResources(t *testing.T) {
+	added := infrascout.Resource{Type: "endpoint", ID: "endpoint:new", Endpoint: &infrascout.Endpoint{Address: "0.0.0.0", Port: 8080, Protocol: "tcp", ExposedLevel: infrascout.ExposedPublic}}
+	removed := infrascout.Resource{Type: "service", ID: "service:old", Service: &infrascout.Service{Name: "old.service", ActiveState: "active"}}
+	report := infrascout.Compare(
+		infrascout.Snapshot{Resources: []infrascout.Resource{removed}},
+		infrascout.Snapshot{Resources: []infrascout.Resource{added}},
+	)
+	if len(report.Added) != 1 || report.Added[0].After["port"] != 8080 {
+		t.Fatalf("added evidence = %+v", report.Added)
+	}
+	if len(report.Removed) != 1 || report.Removed[0].Before["name"] != "old.service" {
+		t.Fatalf("removed evidence = %+v", report.Removed)
 	}
 }

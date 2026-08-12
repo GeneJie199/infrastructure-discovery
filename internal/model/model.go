@@ -42,15 +42,15 @@ type NoisePolicy struct {
 // Resource is a managed entity with a stable resourceId (lifecycle-spec resource).
 // Attributes must not contain plaintext secrets.
 type Resource struct {
-	SpecVersion      string         `json:"specVersion,omitempty"`
-	ResourceID       string         `json:"resourceId"`
-	ResourceType     string         `json:"resourceType"`
-	DisplayName      string         `json:"displayName"`
-	Attributes       map[string]any `json:"attributes,omitempty"`
+	SpecVersion      string            `json:"specVersion,omitempty"`
+	ResourceID       string            `json:"resourceId"`
+	ResourceType     string            `json:"resourceType"`
+	DisplayName      string            `json:"displayName"`
+	Attributes       map[string]any    `json:"attributes,omitempty"`
 	Labels           map[string]string `json:"labels,omitempty"`
-	FirstSeenAt      string         `json:"firstSeenAt,omitempty"`
-	LastSeenAt       string         `json:"lastSeenAt,omitempty"`
-	ParentResourceID string         `json:"parentResourceId,omitempty"`
+	FirstSeenAt      string            `json:"firstSeenAt,omitempty"`
+	LastSeenAt       string            `json:"lastSeenAt,omitempty"`
+	ParentResourceID string            `json:"parentResourceId,omitempty"`
 }
 
 // Relationship links two resources (lifecycle-spec relationship).
@@ -91,15 +91,15 @@ type Snapshot struct {
 
 // DriftReport is the JSON result of comparing two snapshots.
 type DriftReport struct {
-	SpecVersion   string       `json:"specVersion"`
-	ComparedAt    string       `json:"comparedAt"`
-	BaselineID    string       `json:"baselineSnapshotId"`
-	CandidateID   string       `json:"candidateSnapshotId"`
-	FilteredFields []string    `json:"filteredFields"`
-	Added         []Resource   `json:"added"`
-	Removed       []Resource   `json:"removed"`
-	Changed       []Change     `json:"changed"`
-	UnchangedCount int         `json:"unchangedCount"`
+	SpecVersion    string     `json:"specVersion"`
+	ComparedAt     string     `json:"comparedAt"`
+	BaselineID     string     `json:"baselineSnapshotId"`
+	CandidateID    string     `json:"candidateSnapshotId"`
+	FilteredFields []string   `json:"filteredFields"`
+	Added          []Resource `json:"added"`
+	Removed        []Resource `json:"removed"`
+	Changed        []Change   `json:"changed"`
+	UnchangedCount int        `json:"unchangedCount"`
 }
 
 // Change describes attribute-level drift for one resourceId.

@@ -26,14 +26,14 @@ func Collect() (*Info, error) {
 
 func materializeLiveRoot(root string) error {
 	copies := map[string]string{
-		"/etc/hostname":      "hostname",
-		"/etc/os-release":    "os-release",
-		"/proc/version":      "proc/version",
-		"/proc/cpuinfo":      "proc/cpuinfo",
-		"/proc/meminfo":      "proc/meminfo",
-		"/proc/partitions":   "proc/partitions",
-		"/proc/mounts":       "proc/mounts",
-		"/proc/net/dev":      "proc/net/dev",
+		"/etc/hostname":    "hostname",
+		"/etc/os-release":  "os-release",
+		"/proc/version":    "proc/version",
+		"/proc/cpuinfo":    "proc/cpuinfo",
+		"/proc/meminfo":    "proc/meminfo",
+		"/proc/partitions": "proc/partitions",
+		"/proc/mounts":     "proc/mounts",
+		"/proc/net/dev":    "proc/net/dev",
 	}
 	for src, dst := range copies {
 		if err := copyFile(src, filepath.Join(root, dst)); err != nil {

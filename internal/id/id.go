@@ -15,8 +15,8 @@ func newULID() string {
 	return ulid.MustNew(ulid.Timestamp(time.Now()), rand.Reader).String()
 }
 
-func NewSnapshotID() string   { return "snp_" + newULID() }
-func NewInventoryID() string  { return "inv_" + newULID() }
+func NewSnapshotID() string     { return "snp_" + newULID() }
+func NewInventoryID() string    { return "inv_" + newULID() }
 func NewRelationshipID() string { return "rel_" + newULID() }
 
 // Host returns host:{hostname}.

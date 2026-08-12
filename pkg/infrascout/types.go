@@ -4,7 +4,7 @@ package infrascout
 
 import "time"
 
-const Version = "0.1.0"
+var Version = "dev"
 
 // Severity classifies change risk for operators.
 // 专业名称: Severity；通俗解释: 变化有多危险。
@@ -18,16 +18,16 @@ const (
 
 // Host is a machine resource.
 type Host struct {
-	ID                 string             `json:"id"`
-	Hostname           string             `json:"hostname"`
-	OS                 string             `json:"os"`
-	Kernel             string             `json:"kernel"`
-	Architecture       string             `json:"architecture"`
-	CPU                CPUInfo            `json:"cpu"`
-	Memory             MemoryInfo         `json:"memory"`
-	Disks              []DiskInfo         `json:"disks"`
-	NetworkInterfaces  []NetworkInterface `json:"network_interfaces"`
-	CollectedAt        string             `json:"collected_at"`
+	ID                string             `json:"id"`
+	Hostname          string             `json:"hostname"`
+	OS                string             `json:"os"`
+	Kernel            string             `json:"kernel"`
+	Architecture      string             `json:"architecture"`
+	CPU               CPUInfo            `json:"cpu"`
+	Memory            MemoryInfo         `json:"memory"`
+	Disks             []DiskInfo         `json:"disks"`
+	NetworkInterfaces []NetworkInterface `json:"network_interfaces"`
+	CollectedAt       string             `json:"collected_at"`
 }
 
 type CPUInfo struct {
@@ -78,14 +78,14 @@ const (
 
 // Endpoint is a listening network port associated with a process when possible.
 type Endpoint struct {
-	ID          string       `json:"id"`
-	Protocol    string       `json:"protocol"`
-	Address     string       `json:"address"`
-	Port        int          `json:"port"`
-	ProcessID   int          `json:"process_id,omitempty"`
-	ProcessName string       `json:"process_name,omitempty"`
-	ProcessUser string       `json:"process_user,omitempty"`
-	ProcessRef  string       `json:"process_ref,omitempty"` // stable process resource id
+	ID           string       `json:"id"`
+	Protocol     string       `json:"protocol"`
+	Address      string       `json:"address"`
+	Port         int          `json:"port"`
+	ProcessID    int          `json:"process_id,omitempty"`
+	ProcessName  string       `json:"process_name,omitempty"`
+	ProcessUser  string       `json:"process_user,omitempty"`
+	ProcessRef   string       `json:"process_ref,omitempty"` // stable process resource id
 	ExposedLevel ExposedLevel `json:"exposed_level"`
 }
 
@@ -94,24 +94,40 @@ type DeploymentType string
 
 const (
 	DeploySystemd DeploymentType = "systemd"
-	DeployDocker  DeploymentType = "docker" // reserved; not collected in v0.1
+	DeployDocker  DeploymentType = "docker"
 	DeployUnknown DeploymentType = "unknown"
 )
 
-// Service is a managed unit (v0.1: systemd only).
+// Service is a managed systemd unit or Docker container workload.
 type Service struct {
-	ID             string         `json:"id"`
-	Name           string         `json:"name"`
-	Type           string         `json:"type"` // e.g. service
-	DeploymentType DeploymentType `json:"deployment_type"`
-	Source         string         `json:"source"` // systemd | docker | unknown
-	ActiveState    string         `json:"active_state,omitempty"`
-	SubState       string         `json:"sub_state,omitempty"`
-	ExecStart      string         `json:"exec_start,omitempty"`
-	WorkingDirectory string      `json:"working_directory,omitempty"`
-	User           string         `json:"user,omitempty"`
-	MainPID        int            `json:"main_pid,omitempty"`
-	Description    string         `json:"description,omitempty"`
+	ID               string           `json:"id"`
+	Name             string           `json:"name"`
+	Type             string           `json:"type"` // e.g. service
+	DeploymentType   DeploymentType   `json:"deployment_type"`
+	Source           string           `json:"source"` // systemd | docker | unknown
+	ActiveState      string           `json:"active_state,omitempty"`
+	SubState         string           `json:"sub_state,omitempty"`
+	ExecStart        string           `json:"exec_start,omitempty"`
+	WorkingDirectory string           `json:"working_directory,omitempty"`
+	User             string           `json:"user,omitempty"`
+	MainPID          int              `json:"main_pid,omitempty"`
+	Description      string           `json:"description,omitempty"`
+	ContainerID      string           `json:"container_id,omitempty"`
+	Image            string           `json:"image,omitempty"`
+	Status           string           `json:"status,omitempty"`
+	Ports            string           `json:"ports,omitempty"`
+	ComposeProject   string           `json:"compose_project,omitempty"`
+	Health           string           `json:"health,omitempty"`
+	RestartCount     int              `json:"restart_count,omitempty"`
+	Networks         []string         `json:"networks,omitempty"`
+	Mounts           []ContainerMount `json:"mounts,omitempty"`
+}
+
+type ContainerMount struct {
+	Type        string `json:"type"`
+	Source      string `json:"source"`
+	Destination string `json:"destination"`
+	Mode        string `json:"mode,omitempty"`
 }
 
 // Relationship links two resources.
@@ -125,28 +141,71 @@ type Relationship struct {
 
 // Resource is the unified snapshot/inventory entry.
 type Resource struct {
-	Type     string     `json:"type"` // host | process | endpoint | service
-	ID       string     `json:"id"`
-	Host     *Host      `json:"host,omitempty"`
-	Process  *Process   `json:"process,omitempty"`
-	Endpoint *Endpoint  `json:"endpoint,omitempty"`
-	Service  *Service   `json:"service,omitempty"`
+	Type     string         `json:"type"` // host | process | endpoint | service
+	ID       string         `json:"id"`
+	Host     *Host          `json:"host,omitempty"`
+	Process  *Process       `json:"process,omitempty"`
+	Endpoint *Endpoint      `json:"endpoint,omitempty"`
+	Service  *Service       `json:"service,omitempty"`
+	Metadata map[string]any `json:"metadata,omitempty"`
 }
 
 // Inventory is the human-oriented resource list from `infrascout scan`.
 type Inventory struct {
-	CollectedAt   string         `json:"collected_at"`
-	Hostname      string         `json:"hostname"`
-	Summary       Summary        `json:"summary"`
-	Resources     []Resource     `json:"resources"`
-	Relationships []Relationship `json:"relationships"`
+	CollectedAt      string            `json:"collected_at"`
+	Hostname         string            `json:"hostname"`
+	Summary          Summary           `json:"summary"`
+	Resources        []Resource        `json:"resources"`
+	Relationships    []Relationship    `json:"relationships"`
+	Warnings         []string          `json:"warnings,omitempty"`
+	DetectedServices []DetectedService `json:"detected_services,omitempty"`
+	Monitoring       MonitoringPlan    `json:"monitoring_plan"`
+	NginxRoutes      []NginxRoute      `json:"nginx_routes,omitempty"`
+}
+
+type NginxRoute struct {
+	SourceFile string `json:"source_file"`
+	ServerName string `json:"server_name,omitempty"`
+	Listen     string `json:"listen,omitempty"`
+	Location   string `json:"location,omitempty"`
+	Upstream   string `json:"upstream"`
+}
+
+// DetectedService is a deterministic classification of a discovered process or service.
+type DetectedService struct {
+	ResourceID string   `json:"resource_id" yaml:"resource_id"`
+	Kind       string   `json:"kind" yaml:"kind"`
+	Name       string   `json:"name" yaml:"name"`
+	Source     string   `json:"source" yaml:"source"`
+	Confidence float64  `json:"confidence" yaml:"confidence"`
+	Endpoints  []string `json:"endpoints,omitempty" yaml:"endpoints,omitempty"`
+}
+
+type MonitoringPlan struct {
+	Version         string                     `json:"version" yaml:"version"`
+	GeneratedAt     string                     `json:"generated_at" yaml:"generated_at"`
+	Hostname        string                     `json:"hostname" yaml:"hostname"`
+	Recommendations []MonitoringRecommendation `json:"recommendations" yaml:"recommendations"`
+	CoverageGaps    []string                   `json:"coverage_gaps,omitempty" yaml:"coverage_gaps,omitempty"`
+}
+
+type MonitoringRecommendation struct {
+	ID         string            `json:"id" yaml:"id"`
+	TargetID   string            `json:"target_id" yaml:"target_id"`
+	Collector  string            `json:"collector" yaml:"collector"`
+	Priority   string            `json:"priority" yaml:"priority"`
+	Reason     string            `json:"reason" yaml:"reason"`
+	Parameters map[string]string `json:"parameters,omitempty" yaml:"parameters,omitempty"`
 }
 
 type Summary struct {
-	Hosts      int `json:"hosts"`
-	Processes  int `json:"processes"`
-	Endpoints  int `json:"endpoints"`
-	Services   int `json:"services"`
+	Hosts     int `json:"hosts"`
+	Processes int `json:"processes"`
+	Endpoints int `json:"endpoints"`
+	Services  int `json:"services"`
+	Networks  int `json:"networks,omitempty"`
+	Volumes   int `json:"volumes,omitempty"`
+	Routes    int `json:"nginx_routes,omitempty"`
 }
 
 // Snapshot is a comparable state photo from `infrascout snapshot`.
@@ -157,36 +216,49 @@ type Snapshot struct {
 	Relationships []Relationship `json:"relationships"`
 	// NoiseFields are ignored during attribute comparison.
 	NoiseFields []string `json:"noise_fields"`
+	Warnings    []string `json:"warnings,omitempty"`
 }
 
 // DiffReport is the result of comparing two snapshots.
 type DiffReport struct {
-	ComparedAt   string       `json:"compared_at"`
-	BaselineTime string       `json:"baseline_timestamp,omitempty"`
-	CandidateTime string      `json:"candidate_timestamp,omitempty"`
-	Added        []DiffItem   `json:"added"`
-	Removed      []DiffItem   `json:"removed"`
-	Changed      []ChangeItem `json:"changed"`
-	HighestRisk  Severity     `json:"highest_risk"`
-	Unchanged    int          `json:"unchanged_count"`
+	ComparedAt           string                      `json:"compared_at"`
+	BaselineTime         string                      `json:"baseline_timestamp,omitempty"`
+	CandidateTime        string                      `json:"candidate_timestamp,omitempty"`
+	Added                []DiffItem                  `json:"added"`
+	Removed              []DiffItem                  `json:"removed"`
+	Changed              []ChangeItem                `json:"changed"`
+	HighestRisk          Severity                    `json:"highest_risk"`
+	BlockingRisk         Severity                    `json:"blocking_risk"`
+	ClassificationCounts map[DriftClassification]int `json:"classification_counts,omitempty"`
+	Unchanged            int                         `json:"unchanged_count"`
 }
 
 // DiffItem is an added or removed resource.
 type DiffItem struct {
-	ID       string   `json:"id"`
-	Type     string   `json:"type"`
-	Summary  string   `json:"summary"`
-	Severity Severity `json:"severity"`
+	ID              string              `json:"id"`
+	Type            string              `json:"type"`
+	Summary         string              `json:"summary"`
+	Severity        Severity            `json:"severity"`
+	Before          map[string]any      `json:"before,omitempty"`
+	After           map[string]any      `json:"after,omitempty"`
+	Fingerprint     string              `json:"fingerprint,omitempty"`
+	Classification  DriftClassification `json:"classification,omitempty"`
+	Decision        *DriftDecision      `json:"decision,omitempty"`
+	DecisionExpired bool                `json:"decision_expired,omitempty"`
 }
 
 // ChangeItem is a modified resource.
 type ChangeItem struct {
-	ID       string         `json:"id"`
-	Type     string         `json:"type"`
-	Summary  string         `json:"summary"`
-	Severity Severity       `json:"severity"`
-	Before   map[string]any `json:"before,omitempty"`
-	After    map[string]any `json:"after,omitempty"`
+	ID              string              `json:"id"`
+	Type            string              `json:"type"`
+	Summary         string              `json:"summary"`
+	Severity        Severity            `json:"severity"`
+	Before          map[string]any      `json:"before,omitempty"`
+	After           map[string]any      `json:"after,omitempty"`
+	Fingerprint     string              `json:"fingerprint,omitempty"`
+	Classification  DriftClassification `json:"classification,omitempty"`
+	Decision        *DriftDecision      `json:"decision,omitempty"`
+	DecisionExpired bool                `json:"decision_expired,omitempty"`
 }
 
 // FormatTime returns RFC3339 with timezone.
@@ -196,5 +268,5 @@ func FormatTime(t time.Time) string {
 
 // DefaultNoiseFields are volatile attributes not used for drift identity.
 func DefaultNoiseFields() []string {
-	return []string{"pid", "process_id", "parent_pid", "main_pid"}
+	return []string{"pid", "process_id", "parent_pid", "main_pid", "status", "container_id", "restart_count"}
 }

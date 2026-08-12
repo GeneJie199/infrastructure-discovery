@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>InfraScout 基础设施查看器</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="product-brand"><span class="suite-kicker">AI DEVOPS OPEN SUITE</span><div><strong class="product-name">InfraScout</strong><span class="product-subtitle">资产事实与漂移</span></div></div>
+  <div class="sync-tools"><details class="suite-switcher"><summary>模块</summary><div class="suite-menu"><a data-suite="devcycle">DevCycle<span>研发交付</span></a><a data-suite="infrascout" class="current">InfraScout<span>基础设施发现</span></a><a data-suite="fleetscope">FleetScope<span>原生监控</span></a><a data-suite="releaseguard">ReleaseGuard<span>发布门禁</span></a></div></details><span id="sync-state" class="sync-state"><i></i><span>正在读取</span></span><button id="refresh" class="icon-command" type="button" title="立即刷新" aria-label="立即刷新">↻</button></div>
+</header>
+<nav class="tabs" id="tabs" aria-label="基础设施视图" role="tablist">
+  <button data-tab="overview" class="active" role="tab" aria-controls="tab-overview">风险驾驶舱</button>
+  <button data-tab="resources" role="tab" aria-controls="tab-resources">资产清单</button>
+  <button data-tab="ports" role="tab" aria-controls="tab-ports">暴露面</button>
+  <button data-tab="monitoring" role="tab" aria-controls="tab-monitoring">采集计划</button>
+  <button data-tab="database" role="tab" aria-controls="tab-database">数据库</button>
+  <button data-tab="drift" role="tab" aria-controls="tab-drift">变更 <span id="drift-tab-badge" class="tab-badge hidden">0</span></button>
+</nav>
+<div id="stale-banner" class="stale-banner hidden" role="alert"></div>
+<main id="main">
+  <div id="status" class="status"><span>正在加载基础设施事实…</span><button id="retry" class="chip hidden" type="button">重试</button></div>
+  <section id="tab-overview" class="tabpage" role="tabpanel" tabindex="-1"></section>
+  <section id="tab-resources" class="tabpage hidden" role="tabpanel" tabindex="-1"></section>
+  <section id="tab-ports" class="tabpage hidden" role="tabpanel" tabindex="-1"></section>
+  <section id="tab-monitoring" class="tabpage hidden" role="tabpanel" tabindex="-1"></section>
+  <section id="tab-database" class="tabpage hidden" role="tabpanel" tabindex="-1"></section>
+  <section id="tab-drift" class="tabpage hidden" role="tabpanel" tabindex="-1"></section>
+</main>
+<footer class="footer">
+  <span id="footer-sources"></span>
+</footer>
+<dialog id="review-dialog">
+  <form id="review-form">
+    <div class="dialog-head"><div><span class="eyebrow">变更审核</span><h2>审核变化</h2><p id="review-resource"></p></div><button id="review-close" type="button" aria-label="关闭">关闭</button></div>
+    <input id="review-fingerprint" type="hidden">
+    <div class="review-fields">
+      <label>分类<select id="review-classification"><option value="expected">预期</option><option value="approved">已批准</option><option value="temporary">临时允许</option><option value="unexpected">待审核</option><option value="denied">禁止</option></select></label>
+      <label>审核人<input id="review-actor" required maxlength="200" autocomplete="name"></label>
+      <label id="review-expiry-field" class="hidden">有效期至<input id="review-expiry" type="datetime-local"></label>
+      <label class="review-note">处置依据<textarea id="review-note" required maxlength="4000" rows="4"></textarea></label>
+    </div>
+    <p id="review-error" class="form-error hidden" role="alert"></p>
+    <div class="dialog-actions"><button id="review-cancel" type="button">取消</button><button id="review-submit" type="submit">保存审核</button></div>
+  </form>
+</dialog>
+<dialog id="promote-dialog">
+  <form id="promote-form">
+    <div class="dialog-head"><div><span class="eyebrow">基线提升</span><h2>提升到基线</h2><p id="promote-resource"></p></div><button id="promote-close" type="button" aria-label="关闭">关闭</button></div>
+    <input id="promote-fingerprint" type="hidden">
+    <div class="promote-body">
+      <div id="promote-decision" class="decision-proof"></div>
+      <div class="baseline-diff"><div><h3>当前基线</h3><div id="promote-before"></div></div><div><h3>提升后基线</h3><div id="promote-after"></div></div></div>
+      <div class="danger-notice"><strong>不可逆操作</strong><span>只接受这一条已审核变化；其他待审变化不会写入基线。</span></div>
+      <label class="confirm-check"><input id="promote-ack" type="checkbox">我已核对证据与审核记录</label>
+      <p id="promote-error" class="form-error hidden" role="alert"></p>
+    </div>
+    <div class="dialog-actions"><button id="promote-cancel" type="button">取消</button><button id="promote-submit" class="danger-command" type="submit" disabled>确认提升</button></div>
+  </form>
+</dialog>
+<div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+<script src="/static/suite.js"></script>
+<script src="/static/app.js"></script>
+</body>
+</html>

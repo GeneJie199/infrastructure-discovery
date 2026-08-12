@@ -1,0 +1,19 @@
+[Unit]
+Description=InfraScout infrastructure drift watcher
+After=network.target docker.service
+
+[Service]
+Type=simple
+User=root
+Group=root
+ExecStart=/usr/local/bin/infrascout watch --state-dir /var/lib/infrascout --addr 127.0.0.1:8765 --interval 1m
+Restart=on-failure
+RestartSec=5s
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/infrascout
+
+[Install]
+WantedBy=multi-user.target
