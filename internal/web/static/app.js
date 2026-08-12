@@ -134,18 +134,22 @@
     });
 
     var risks = riskItems(ctx);
+    var exposureRisks = risks.filter(function (item) { return item.type === "endpoint"; });
+    var driftRisks = risks.filter(function (item) { return item.type !== "endpoint"; });
+    var visibleRisks = risks.slice(0, 6);
+    var hiddenRiskCount = Math.max(0, risks.length - visibleRisks.length);
     var html = '<div class="page-head"><div><span class="eyebrow">主机事实</span><h1>' + esc(ctx.hostname) + '</h1><p>从实际进程、监听、服务、路由和快照变化中定位需要处理的基础设施事实。</p></div><div class="capture"><span class="source-badge">' + (ctx.sourceMode === 'inventory' ? '实时清单' : '快照回放') + '</span><span>最近采集</span><strong>' + fmtTime(ctx.capturedAt) + '</strong></div></div>';
 	if (ctx.inventory && ctx.inventory.warnings && ctx.inventory.warnings.length) {
 		html += '<div class="notice warning-notice"><strong>采集提示</strong><br>' +
 		  ctx.inventory.warnings.map(esc).join('<br>') + '</div>';
 	}
-    html += '<div class="kpi-grid"><button class="kpi" data-jump="ports"><span>需处理风险</span><b class="' + (risks.length ? 'crit-text' : 'ok-text') + '">' + risks.length + '</b><small>严重与警告合计</small></button>' +
+    html += '<div class="kpi-grid"><button class="kpi" data-scroll-target="risk-queue"><span>需处理风险</span><b class="' + (risks.length ? 'crit-text' : 'ok-text') + '">' + risks.length + '</b><small>' + exposureRisks.length + ' 暴露 · ' + driftRisks.length + ' 漂移</small></button>' +
       '<button class="kpi" data-jump="ports"><span>公网监听</span><b>' + publicPorts.length + '</b><small>' + rootPublic.length + ' 个由 root 运行</small></button>' +
       '<button class="kpi" data-jump="resources"><span>运行资产</span><b>' + (counts.processes + counts.services) + '</b><small>' + counts.processes + ' 进程 · ' + counts.services + ' 服务</small></button>' +
       '<button class="kpi" data-jump="drift"><span>最近变更</span><b>' + (ctx.drift ? (ctx.drift.added || []).length + (ctx.drift.removed || []).length + (ctx.drift.changed || []).length : 0) + '</b><small>' + (ctx.drift ? (SEV_TEXT[ctx.drift.highest_risk] || ctx.drift.highest_risk) : '未加载对比') + '</small></button></div>';
 
-    html += '<div class="dashboard-grid"><section class="dashboard-panel"><div class="panel-head"><div><span class="eyebrow">待处理</span><h2>风险优先队列</h2></div><button class="link-btn" data-jump="ports">查看全部暴露面</button></div>';
-    html += risks.length ? '<div class="risk-list">' + risks.slice(0, 6).map(function (item) { return '<button type="button" class="risk-row ' + item.cls + '" data-open-resource="' + esc(item.id) + '"><span class="risk-mark"></span><span><b>' + esc(item.title) + '</b><small>' + esc(item.detail) + ' · ' + esc(item.id) + '</small></span><em>查看</em></button>'; }).join('') + '</div>' : '<div class="notice ok-notice">当前快照未发现需要立即处置的暴露或漂移风险。</div>';
+    html += '<div class="dashboard-grid"><section class="dashboard-panel" id="risk-queue"><div class="panel-head"><div><span class="eyebrow">待处理</span><h2>风险优先队列</h2></div><div class="panel-actions"><button class="link-btn" data-jump="ports">暴露 ' + exposureRisks.length + '</button><button class="link-btn" data-jump="drift">漂移 ' + driftRisks.length + '</button></div></div>';
+    html += risks.length ? '<div class="risk-list">' + visibleRisks.map(function (item) { return '<button type="button" class="risk-row ' + item.cls + '" data-open-resource="' + esc(item.id) + '"><span class="risk-mark"></span><span><b>' + esc(item.title) + '</b><small>' + esc(item.detail) + ' · ' + esc(item.id) + '</small></span><em>查看</em></button>'; }).join('') + (hiddenRiskCount ? '<div class="risk-more">还有 ' + hiddenRiskCount + ' 条风险未在首页展开，请从上方“暴露 / 漂移”入口查看完整清单。</div>' : '') + '</div>' : '<div class="notice ok-notice">当前快照未发现需要立即处置的暴露或漂移风险。</div>';
     html += '</section><section class="dashboard-panel"><div class="panel-head"><div><span class="eyebrow">系统轮廓</span><h2>主机轮廓</h2></div></div>';
     html += '<div class="host-profile">';
     if (host) {
@@ -640,6 +644,8 @@
     document.addEventListener("click", function (event) {
       var jump = event.target.closest("[data-jump]");
       if (jump) activateTab(jump.getAttribute("data-jump"), true);
+      var scroll = event.target.closest("[data-scroll-target]");
+      if (scroll) document.getElementById(scroll.getAttribute("data-scroll-target"))?.scrollIntoView({ behavior: "smooth", block: "start" });
       var open = event.target.closest("[data-open-resource]");
       if (open) {
         selectedResourceId = open.getAttribute("data-open-resource");

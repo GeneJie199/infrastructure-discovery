@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.2 - 2026-08-13
+
+- Add consistent visual product marks to the suite switcher while retaining InfraScout's dense risk-focused navigation.
+- Reconcile the overview risk count with explicit exposure/drift destinations and disclose risks hidden by the compact six-row priority queue.
+
 ## 0.3.1 - 2026-08-12
 
 - Align the suite patch release with the FleetScope transient CPU health-classification fix validated by the cross-module published-artifact gate.
