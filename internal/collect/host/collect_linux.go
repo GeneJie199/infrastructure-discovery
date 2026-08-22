@@ -67,5 +67,6 @@ func copyFile(src, dst string) error {
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 		return err
 	}
+	// #nosec G703 -- dst is inside a process-private temporary root assembled from fixed OS fact paths.
 	return os.WriteFile(dst, b, 0o644)
 }
