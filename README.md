@@ -59,6 +59,8 @@ export INFRASCOUT_DATABASE_DSN='postgres://monitor:...@127.0.0.1/app?sslmode=req
 infrascout database --engine postgres --state-dir /var/lib/infrascout
 ```
 
+PostgreSQL 的表、字段、约束和触发器通过只读系统目录采集；视图、函数和权限仍遵循当前账号的可见范围。MySQL 由服务端按权限裁剪 `information_schema`，完整触发器需要目标库的 `TRIGGER` 权限，完整用户/角色需要 `mysql.user` 的 `SELECT` 权限；缺少的范围会写入 `warnings`，不会伪装成已采集。采集事务始终为只读，且从不查询业务表行。
+
 也可以直接并入首次启动或持续采集：`infrascout up --database-engine postgres ...`，或为 `watch` 增加 `--database-engine postgres`；DSN 仍只从环境变量读取。
 
 第一次采集自动建立数据库元数据基线，以后同一条命令写入 `database-current.json` 和 `database-diff.json`，`up` / `serve --state-dir` 自动加载。明确批准新结构时执行：

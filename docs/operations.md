@@ -27,6 +27,8 @@
 
    To refresh read-only database metadata in the same loop, expose the DSN through the service environment and add `--database-engine postgres` or `--database-engine mysql`. Database drift then participates in the same review decisions and `check --fail-on` gate.
 
+   PostgreSQL constraints and triggers use read-only system catalogs; views, routines, and privileges remain limited to what the account can see. MySQL exposes triggers only with the target database `TRIGGER` privilege and exposes complete users/roles only with `SELECT` on `mysql.user`. Missing optional metadata is recorded in `warnings`. InfraScout always opens a read-only transaction and never selects business table rows.
+
 The viewer deliberately binds to loopback. Access a remote host through an SSH tunnel:
 
 ```bash
