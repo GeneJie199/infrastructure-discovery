@@ -317,7 +317,7 @@
     types.forEach(function (t) {
       html += '<button class="chip' + (resFilter.type === t[0] ? " active" : "") + '" data-rtype="' + t[0] + '">' + t[1] + "</button>";
     });
-    html += '<input type="search" id="res-q" placeholder="搜索 ID / 名称 / 命令行…" value="' + esc(resFilter.q) + '">';
+    html += '<label class="sr-only" for="res-q">搜索资产</label><input type="search" id="res-q" placeholder="搜索 ID / 名称 / 命令行…" value="' + esc(resFilter.q) + '">';
     html += "</div>";
 
     var rows = ctx.resources.filter(function (r) {
@@ -721,12 +721,28 @@
 
   function captureViewState(tab) {
     var page = document.getElementById("tab-" + tab);
-    return { scrollY: window.scrollY, details: Array.from(page.querySelectorAll("details")).map(function (detail) { return detail.open; }) };
+    var focusables = Array.from(page.querySelectorAll('a[href], button, input, select, textarea, summary, [tabindex]:not([tabindex="-1"])'));
+    var active = page.contains(document.activeElement) ? document.activeElement : null;
+    return {
+      scrollY: window.scrollY,
+      details: Array.from(page.querySelectorAll("details")).map(function (detail) { return detail.open; }),
+      focusId: active && active.id || "",
+      focusIndex: active ? focusables.indexOf(active) : -1,
+      selectionStart: active && typeof active.selectionStart === "number" ? active.selectionStart : null,
+      selectionEnd: active && typeof active.selectionEnd === "number" ? active.selectionEnd : null
+    };
   }
 
   function restoreViewState(tab, state) {
     if (!state) return;
-    document.getElementById("tab-" + tab).querySelectorAll("details").forEach(function (detail, index) { detail.open = Boolean(state.details[index]); });
+    var page = document.getElementById("tab-" + tab);
+    page.querySelectorAll("details").forEach(function (detail, index) { detail.open = Boolean(state.details[index]); });
+    var focusables = Array.from(page.querySelectorAll('a[href], button, input, select, textarea, summary, [tabindex]:not([tabindex="-1"])'));
+    var replacement = state.focusId ? document.getElementById(state.focusId) : focusables[state.focusIndex];
+    if (replacement && page.contains(replacement)) {
+      replacement.focus({ preventScroll: true });
+      if (state.selectionStart !== null && typeof replacement.setSelectionRange === "function") replacement.setSelectionRange(state.selectionStart, state.selectionEnd);
+    }
     window.scrollTo(0, state.scrollY);
   }
 
@@ -742,6 +758,7 @@
       button.tabIndex = active ? 0 : -1;
     });
     document.querySelectorAll(".tabpage").forEach(function (page) { page.classList.toggle("hidden", page.id !== "tab-" + tab); });
+    document.title = ({ overview: "总览", applications: "应用", resources: "资产", ports: "暴露与依赖", monitoring: "FleetScope", database: "数据库", drift: "变更" })[tab] + " · InfraScout";
     if (updateHash) history.pushState(null, "", "#/" + tab);
     if (updateHash) document.getElementById("tab-" + tab).focus({ preventScroll: true });
   }
@@ -798,7 +815,9 @@
   function loadData(options) {
     options = options || {};
     if (loading) return Promise.resolve();
-    if (options.background && (document.hidden || document.querySelector("dialog[open]"))) return Promise.resolve();
+    var activePage = document.getElementById("tab-" + currentTab);
+    var activeControl = activePage && activePage.contains(document.activeElement) && document.activeElement.matches('a[href], button, input, select, textarea, summary, [tabindex]');
+    if (options.background && (document.hidden || document.querySelector("dialog[open]") || activeControl)) return Promise.resolve();
     loading = true;
     var refresh = document.getElementById("refresh");
     refresh.disabled = true;

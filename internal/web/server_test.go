@@ -79,6 +79,12 @@ func TestStaticAssetsServed(t *testing.T) {
 			t.Fatalf("GET %s content-type = %q", tc.path, ct)
 		}
 	}
+	index := get(t, srv.Handler(), "/").Body.String()
+	for _, marker := range []string{`class="skip-link"`, `id="main-content" tabindex="-1"`, `id="status" class="status" role="status"`, `aria-labelledby="review-title"`, `aria-label="套件模块"`} {
+		if !strings.Contains(index, marker) {
+			t.Fatalf("index page missing UI contract %q", marker)
+		}
+	}
 }
 
 func TestLoadRequiresInput(t *testing.T) {
