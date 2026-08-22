@@ -65,12 +65,71 @@ func Compare(baseline, candidate Snapshot) DiffReport {
 		report.Removed = append(report.Removed, item)
 	}
 
-	report.HighestRisk = highest(
-		severitiesFromAdded(report.Added),
-		severitiesFromRemoved(report.Removed),
-		severitiesFromChanged(report.Changed),
-	)
+	baseRelationships := indexRelationships(baseline.Relationships)
+	candidateRelationships := indexRelationships(candidate.Relationships)
+	for id, relationship := range candidateRelationships {
+		before, existed := baseRelationships[id]
+		afterMap := relationshipAttrs(relationship)
+		if !existed {
+			report.Added = append(report.Added, DiffItem{ID: id, Type: "relationship", Summary: relationshipSummary("added", relationship), Severity: classifyRelationship(relationship), After: afterMap})
+			continue
+		}
+		beforeMap := relationshipAttrs(before)
+		if reflect.DeepEqual(beforeMap, afterMap) {
+			continue
+		}
+		diffBefore, diffAfter := mapDiff(beforeMap, afterMap)
+		report.Changed = append(report.Changed, ChangeItem{ID: id, Type: "relationship", Summary: relationshipSummary("changed", relationship), Severity: classifyRelationship(relationship), Before: diffBefore, After: diffAfter})
+	}
+	for id, relationship := range baseRelationships {
+		if _, ok := candidateRelationships[id]; ok {
+			continue
+		}
+		report.Removed = append(report.Removed, DiffItem{ID: id, Type: "relationship", Summary: relationshipSummary("removed", relationship), Severity: classifyRelationship(relationship), Before: relationshipAttrs(relationship)})
+	}
+
+	RecalculateReport(&report)
 	return report
+}
+
+// RecalculateReport refreshes aggregate risk and normalized change events after
+// another deterministic domain, such as database metadata, merges drift items.
+func RecalculateReport(report *DiffReport) {
+	if report == nil {
+		return
+	}
+	report.HighestRisk = highest(severitiesFromAdded(report.Added), severitiesFromRemoved(report.Removed), severitiesFromChanged(report.Changed))
+	report.Events = changeEvents(*report)
+}
+
+func indexRelationships(values []Relationship) map[string]Relationship {
+	result := make(map[string]Relationship, len(values))
+	for _, value := range values {
+		result[RelationshipID(value)] = value
+	}
+	return result
+}
+
+func relationshipAttrs(value Relationship) map[string]any {
+	// Evidence explains how a relationship was observed, but it can contain
+	// volatile collector details such as a PID. Drift is based on the stable
+	// relationship facts so restart churn does not invalidate review decisions.
+	return map[string]any{"source": value.Source, "target": value.Target, "type": value.Type, "confidence": value.Confidence}
+}
+
+func relationshipSummary(action string, value Relationship) string {
+	return fmt.Sprintf("relationship %s: %s %s %s", action, value.Source, value.Type, value.Target)
+}
+
+func classifyRelationship(value Relationship) Severity {
+	switch value.Type {
+	case "proxies_to", "provides_database":
+		return SeverityWarning
+	case "listens_on":
+		return SeverityWarning
+	default:
+		return SeverityInfo
+	}
 }
 
 func indexResources(rs []Resource) map[string]Resource {
@@ -157,6 +216,32 @@ func resourceAttrs(r Resource) map[string]any {
 		m["restart_count"] = s.RestartCount
 		m["networks"] = s.Networks
 		m["mounts"] = s.Mounts
+		m["restart_policy"] = s.RestartPolicy
+		m["auto_start"] = s.AutoStart
+		m["unit_file"] = s.UnitFile
+	case "deployment":
+		if r.Deployment == nil {
+			return m
+		}
+		d := r.Deployment
+		m["name"], m["method"], m["location"] = d.Name, d.Method, d.Location
+		m["command"], m["working_directory"], m["user"] = d.Command, d.WorkingDirectory, d.User
+		m["auto_start"], m["restart_policy"], m["restart_command"] = d.AutoStart, d.RestartPolicy, d.RestartCommand
+		m["config_files"], m["compose_project"] = d.ConfigFiles, d.ComposeProject
+	case "database":
+		if r.Database == nil {
+			return m
+		}
+		d := r.Database
+		m["engine"], m["name"], m["resource_id"], m["endpoint_ids"], m["local"] = d.Engine, d.Name, d.ResourceID, d.EndpointIDs, d.Local
+	case "docker.network":
+		if r.Network != nil {
+			m["name"], m["driver"] = r.Network.Name, r.Network.Driver
+		}
+	case "docker.volume":
+		if r.Volume != nil {
+			m["name"], m["kind"], m["source"], m["destination"], m["mode"] = r.Volume.Name, r.Volume.Kind, r.Volume.Source, r.Volume.Destination, r.Volume.Mode
+		}
 	}
 	return m
 }
@@ -210,8 +295,30 @@ func classifyAdded(r Resource) DiffItem {
 			// root process alone is INFO unless tied to public endpoint (handled there)
 			sev = SeverityInfo
 		}
+	case "deployment":
+		sev = SeverityWarning
+	case "database":
+		sev = SeverityWarning
 	}
 	return DiffItem{ID: r.ID, Type: r.Type, Summary: sum, Severity: sev}
+}
+
+func changeEvents(report DiffReport) []ChangeEvent {
+	events := make([]ChangeEvent, 0, len(report.Added)+len(report.Removed)+len(report.Changed))
+	appendEvent := func(kind, id, resourceType, summary string, severity Severity) {
+		fingerprint := DriftFingerprint(kind, id, resourceType, summary, nil, nil)
+		events = append(events, ChangeEvent{ID: "event:" + strings.TrimPrefix(fingerprint, "drift_"), Kind: kind, ResourceID: id, Type: resourceType, Severity: severity, Summary: summary, OccurredAt: report.ComparedAt})
+	}
+	for _, item := range report.Added {
+		appendEvent("added", item.ID, item.Type, item.Summary, item.Severity)
+	}
+	for _, item := range report.Removed {
+		appendEvent("removed", item.ID, item.Type, item.Summary, item.Severity)
+	}
+	for _, item := range report.Changed {
+		appendEvent("changed", item.ID, item.Type, item.Summary, item.Severity)
+	}
+	return events
 }
 
 func classifyRemoved(r Resource) DiffItem {
@@ -295,6 +402,22 @@ func shortName(r Resource) string {
 	case "service":
 		if r.Service != nil {
 			return r.Service.Name
+		}
+	case "deployment":
+		if r.Deployment != nil {
+			return r.Deployment.Name
+		}
+	case "database":
+		if r.Database != nil {
+			return r.Database.Name
+		}
+	case "docker.network":
+		if r.Network != nil {
+			return r.Network.Name
+		}
+	case "docker.volume":
+		if r.Volume != nil {
+			return r.Volume.Name
 		}
 	}
 	return r.ID

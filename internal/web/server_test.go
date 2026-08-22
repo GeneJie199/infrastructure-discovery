@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/GeneJie199/infrastructure-discovery/internal/dbmeta"
 	"github.com/GeneJie199/infrastructure-discovery/pkg/infrascout"
 )
 
@@ -34,8 +35,8 @@ func TestLoadDemoServesAllDocuments(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &p); err != nil {
 		t.Fatalf("api response not JSON: %v", err)
 	}
-	if p.Inventory == nil || p.Snapshot == nil || p.Drift == nil || p.Database == nil {
-		t.Fatal("demo should load inventory, snapshot, drift, and database metadata")
+	if p.Inventory == nil || p.Snapshot == nil || p.Drift == nil || p.Database == nil || p.DatabaseDiff == nil {
+		t.Fatal("demo should load inventory, snapshot, drift, database metadata, and database drift")
 	}
 	var drift infrascout.DiffReport
 	if err := json.Unmarshal(p.Drift, &drift); err != nil {
@@ -213,7 +214,7 @@ func TestLoadToleratesBOM(t *testing.T) {
 // TestDemoInSyncWithExamples guards the embedded demo against drifting
 // away from the canonical examples/v0.1 documents.
 func TestDemoInSyncWithExamples(t *testing.T) {
-	for _, name := range []string{"inventory.json", "snapshot.json", "drift.json", "database.json"} {
+	for _, name := range []string{"inventory.json", "snapshot.json", "drift.json", "database.json", "database-diff.json"} {
 		embedded, err := demoFS.ReadFile("demo/" + name)
 		if err != nil {
 			t.Fatalf("read embedded %s: %v", name, err)
@@ -271,6 +272,7 @@ func TestManagedStateReviewAndSelectivePromotion(t *testing.T) {
 	}
 	fingerprint := report.Changed[0].Fingerprint
 	request := httptest.NewRequest(http.MethodPatch, "/api/reviews/"+fingerprint, strings.NewReader(`{"classification":"approved","actor":"platform-owner","note":"release rel-7"}`))
+	request.Header.Set(mutationHeader, "1")
 	recorder := httptest.NewRecorder()
 	server.Handler().ServeHTTP(recorder, request)
 	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), `"classification":"approved"`) {
@@ -278,6 +280,12 @@ func TestManagedStateReviewAndSelectivePromotion(t *testing.T) {
 	}
 
 	request = httptest.NewRequest(http.MethodPost, "/api/reviews/"+fingerprint+"/promote", nil)
+	recorder = httptest.NewRecorder()
+	server.Handler().ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusForbidden {
+		t.Fatalf("promote without mutation header = %d %s", recorder.Code, recorder.Body.String())
+	}
+	request.Header.Set(mutationHeader, "1")
 	recorder = httptest.NewRecorder()
 	server.Handler().ServeHTTP(recorder, request)
 	if recorder.Code != http.StatusOK {
@@ -290,6 +298,60 @@ func TestManagedStateReviewAndSelectivePromotion(t *testing.T) {
 	var savedBaseline infrascout.Snapshot
 	if err := readJSON(filepath.Join(dir, "baseline.json"), &savedBaseline); err != nil || savedBaseline.Resources[0].Metadata["image"] != "v2" {
 		t.Fatalf("saved baseline = %+v, %v", savedBaseline, err)
+	}
+}
+
+func TestManagedStateReviewsAndPromotesOneDatabaseChange(t *testing.T) {
+	dir := t.TempDir()
+	baseline := infrascout.Snapshot{Hostname: "node-a", State: "approved"}
+	current := infrascout.Snapshot{Hostname: "node-a", State: "observed"}
+	databaseBaseline := dbmeta.Metadata{Version: "infrascout.database/v2", Engine: "postgresql", Schemas: []dbmeta.Schema{{Name: "public", Tables: []dbmeta.Table{{Schema: "public", Name: "orders", Columns: []dbmeta.Column{{Name: "id", DataType: "uuid"}}}}}}}
+	databaseCurrent := databaseBaseline
+	databaseCurrent.Schemas = []dbmeta.Schema{{Name: "public", Tables: []dbmeta.Table{{Schema: "public", Name: "orders", Columns: []dbmeta.Column{{Name: "id", DataType: "bigint"}}}}}}
+	databaseDiff := dbmeta.Compare(databaseBaseline, databaseCurrent)
+	report := infrascout.Compare(baseline, current)
+	dbmeta.MergeIntoInfraReport(&report, databaseDiff)
+	infrascout.ApplyDecisions(&report, infrascout.DecisionSet{}, time.Now())
+	write := func(name string, value any) {
+		data, _ := json.Marshal(value)
+		if err := os.WriteFile(filepath.Join(dir, name), data, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("inventory.json", infrascout.Inventory{Hostname: "node-a"})
+	write("baseline.json", baseline)
+	write("current.json", current)
+	write("drift.json", report)
+	write("database-baseline.json", databaseBaseline)
+	write("database-current.json", databaseCurrent)
+	write("database-diff.json", databaseDiff)
+	write("decisions.json", infrascout.DecisionSet{Version: infrascout.DecisionSetVersion, Decisions: []infrascout.DriftDecision{}})
+	server, err := Load(Config{StateDir: dir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fingerprint := report.Changed[0].Fingerprint
+	request := httptest.NewRequest(http.MethodPatch, "/api/reviews/"+fingerprint, strings.NewReader(`{"classification":"approved","actor":"db-owner","note":"migration reviewed"}`))
+	request.Header.Set(mutationHeader, "1")
+	recorder := httptest.NewRecorder()
+	server.Handler().ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("review=%d %s", recorder.Code, recorder.Body.String())
+	}
+	request = httptest.NewRequest(http.MethodPost, "/api/reviews/"+fingerprint+"/promote", nil)
+	request.Header.Set(mutationHeader, "1")
+	recorder = httptest.NewRecorder()
+	server.Handler().ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("promote=%d %s", recorder.Code, recorder.Body.String())
+	}
+	var promoted dbmeta.Metadata
+	if err = readJSON(filepath.Join(dir, "database-baseline.json"), &promoted); err != nil || promoted.Schemas[0].Tables[0].Columns[0].DataType != "bigint" {
+		t.Fatalf("database baseline=%+v, %v", promoted, err)
+	}
+	var finalReport infrascout.DiffReport
+	if err = json.Unmarshal(recorder.Body.Bytes(), &finalReport); err != nil || len(finalReport.Changed) != 0 {
+		t.Fatalf("final report=%+v, %v", finalReport, err)
 	}
 }
 
@@ -309,7 +371,9 @@ func TestReviewMutationDisabledForRemoteMode(t *testing.T) {
 		t.Fatal(err)
 	}
 	recorder := httptest.NewRecorder()
-	server.Handler().ServeHTTP(recorder, httptest.NewRequest(http.MethodPatch, "/api/reviews/drift_x", strings.NewReader(`{}`)))
+	request := httptest.NewRequest(http.MethodPatch, "/api/reviews/drift_x", strings.NewReader(`{}`))
+	request.Header.Set(mutationHeader, "1")
+	server.Handler().ServeHTTP(recorder, request)
 	if recorder.Code != http.StatusForbidden {
 		t.Fatalf("remote mutation = %d %s", recorder.Code, recorder.Body.String())
 	}

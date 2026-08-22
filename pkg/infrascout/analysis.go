@@ -39,6 +39,8 @@ func AnalyzeInventory(inv *Inventory) {
 	}
 	sort.Slice(detected, func(i, j int) bool { return detected[i].ResourceID < detected[j].ResourceID })
 	inv.DetectedServices = detected
+	inv.Applications = buildApplications(inv, detected)
+	addDatabaseResources(inv, detected)
 	plan := MonitoringPlan{Version: "infrascout.monitoring/v1", GeneratedAt: inv.CollectedAt, Hostname: inv.Hostname, Recommendations: []MonitoringRecommendation{}, CoverageGaps: []string{}}
 	plan.Recommendations = append(plan.Recommendations, MonitoringRecommendation{ID: "monitor.host", TargetID: HostID(inv.Hostname), Collector: "fleetscope/system", Priority: "required", Reason: "collect host CPU, memory, disk, load, and network telemetry with the FleetScope native agent"})
 	if hasDocker(inv) {
@@ -72,6 +74,80 @@ func AnalyzeInventory(inv *Inventory) {
 	}
 	sort.Strings(plan.CoverageGaps)
 	inv.Monitoring = plan
+}
+
+func buildApplications(inv *Inventory, detected []DetectedService) []Application {
+	resources := indexResources(inv.Resources)
+	result := make([]Application, 0, len(detected))
+	for _, item := range detected {
+		app := Application{
+			ID: "application:" + sanitizeID(item.ResourceID), Name: item.Name, Kind: item.Kind,
+			Source: item.Source, Confidence: item.Confidence, ResourceIDs: []string{item.ResourceID},
+			NeedsReview: item.Confidence < .9, EvidenceSummary: []string{"deterministic process/service signature"},
+		}
+		resource := resources[item.ResourceID]
+		if resource.Service != nil {
+			app.Status = strings.TrimSpace(resource.Service.ActiveState + " / " + resource.Service.SubState)
+			if resource.Service.Source == "systemd" {
+				app.RestartCommand = "systemctl restart " + resource.Service.Name
+			} else if resource.Service.Source == "docker" {
+				app.RestartCommand = "docker restart " + resource.Service.Name
+			}
+		}
+		for _, rel := range inv.Relationships {
+			if rel.Source != item.ResourceID {
+				continue
+			}
+			switch rel.Type {
+			case "listens_on":
+				app.EndpointIDs = appendUnique(app.EndpointIDs, rel.Target)
+			case "deployed_as":
+				app.DeploymentIDs = appendUnique(app.DeploymentIDs, rel.Target)
+			case "connected_to", "mounts", "proxies_to":
+				app.DependencyIDs = appendUnique(app.DependencyIDs, rel.Target)
+			}
+		}
+		for _, endpoint := range inv.Resources {
+			if endpoint.Endpoint == nil {
+				continue
+			}
+			if endpoint.Endpoint.ProcessRef == item.ResourceID || (resource.Service != nil && resource.Service.MainPID > 0 && endpoint.Endpoint.ProcessID == resource.Service.MainPID) {
+				app.EndpointIDs = appendUnique(app.EndpointIDs, endpoint.ID)
+			}
+		}
+		sort.Strings(app.EndpointIDs)
+		sort.Strings(app.DeploymentIDs)
+		sort.Strings(app.DependencyIDs)
+		result = append(result, app)
+	}
+	return result
+}
+
+func addDatabaseResources(inv *Inventory, detected []DetectedService) {
+	for _, item := range detected {
+		if item.Kind != "postgresql" && item.Kind != "mysql" && item.Kind != "redis" {
+			continue
+		}
+		id := DatabaseID(inv.Hostname, item.Kind, item.ResourceID)
+		endpointIDs := []string{}
+		for _, app := range inv.Applications {
+			if app.ResourceIDs[0] == item.ResourceID {
+				endpointIDs = append(endpointIDs, app.EndpointIDs...)
+				break
+			}
+		}
+		inv.Resources = append(inv.Resources, Resource{Type: "database", ID: id, Database: &Database{ID: id, Engine: item.Kind, Name: item.Name, ResourceID: item.ResourceID, EndpointIDs: endpointIDs, Local: true}, Evidence: []Evidence{{ID: "evidence:" + sanitizeID(id) + ":classification", ResourceID: id, Source: "process/service signature", Detail: item.Kind}}})
+		inv.Relationships = append(inv.Relationships, Relationship{Source: item.ResourceID, Target: id, Type: "provides_database", Confidence: item.Confidence, Evidence: []string{"deterministic signature: " + item.Kind}})
+	}
+}
+
+func appendUnique(values []string, value string) []string {
+	for _, current := range values {
+		if current == value {
+			return values
+		}
+	}
+	return append(values, value)
 }
 
 func recognizeKind(v string) string {

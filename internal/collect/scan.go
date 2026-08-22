@@ -12,6 +12,7 @@ import (
 	"github.com/GeneJie199/infrastructure-discovery/internal/collect/systemd"
 	"github.com/GeneJie199/infrastructure-discovery/internal/id"
 	"github.com/GeneJie199/infrastructure-discovery/internal/model"
+	"github.com/GeneJie199/infrastructure-discovery/internal/redact"
 )
 
 // Scan runs INF-002..INF-004 collectors and builds inventory + snapshot (INF-001).
@@ -81,7 +82,7 @@ func Scan(opts Options) (*Result, error) {
 				"user":      p.User,
 				"uid":       p.UID,
 				"comm":      p.Comm,
-				"cmdline":   p.Cmdline,
+				"cmdline":   redact.CommandLine(p.Cmdline),
 				"exe":       p.Exe,
 				"cwd":       p.Cwd,
 				"state":     p.State,

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/GeneJie199/infrastructure-discovery/internal/dbmeta"
 	"github.com/GeneJie199/infrastructure-discovery/pkg/infrascout"
 	"github.com/spf13/cobra"
 )
@@ -136,6 +137,7 @@ func promoteCmd() *cobra.Command {
 				return err
 			}
 			report := infrascout.Compare(baseline, current)
+			mergeDatabaseState(stateDir, &report)
 			decisions, err := readDecisionSet(stateDir)
 			if err != nil {
 				return err
@@ -149,15 +151,38 @@ func promoteCmd() *cobra.Command {
 			if classification != infrascout.ClassificationApproved && classification != infrascout.ClassificationExpected {
 				return fmt.Errorf("change is %s; only approved or expected changes can be promoted", classification)
 			}
-			infrascout.PromoteResource(&baseline, current, resolvedResource, kind)
-			baseline.Timestamp = infrascout.FormatTime(now)
-			if err := writeState(stateDir, "baseline.json", baseline); err != nil {
-				return err
-			}
-			report = infrascout.Compare(baseline, current)
-			infrascout.ApplyDecisions(&report, decisions, now)
-			if err := writeState(stateDir, "drift.json", report); err != nil {
-				return err
+			if strings.HasPrefix(resolvedResource, "dbmeta:") {
+				var databaseBaseline, databaseCurrent dbmeta.Metadata
+				if err = readJSONFileInto(filepath.Join(stateDir, "database-baseline.json"), &databaseBaseline); err != nil {
+					return err
+				}
+				if err = readJSONFileInto(filepath.Join(stateDir, "database-current.json"), &databaseCurrent); err != nil {
+					return err
+				}
+				if err = dbmeta.PromoteChange(&databaseBaseline, databaseCurrent, resolvedResource, kind); err != nil {
+					return err
+				}
+				if err = writeState(stateDir, "database-baseline.json", databaseBaseline); err != nil {
+					return err
+				}
+				if err = writeState(stateDir, "database-diff.json", dbmeta.Compare(databaseBaseline, databaseCurrent)); err != nil {
+					return err
+				}
+				if report, err = rebuildSavedDrift(stateDir, now); err != nil {
+					return err
+				}
+			} else {
+				infrascout.PromoteResource(&baseline, current, resolvedResource, kind)
+				baseline.Timestamp = infrascout.FormatTime(now)
+				if err := writeState(stateDir, "baseline.json", baseline); err != nil {
+					return err
+				}
+				report = infrascout.Compare(baseline, current)
+				mergeDatabaseState(stateDir, &report)
+				infrascout.ApplyDecisions(&report, decisions, now)
+				if err := writeState(stateDir, "drift.json", report); err != nil {
+					return err
+				}
 			}
 			fmt.Fprintf(command.OutOrStdout(), "promoted %s (%s %s) into baseline\n", resolvedFingerprint, kind, resolvedResource)
 			return nil

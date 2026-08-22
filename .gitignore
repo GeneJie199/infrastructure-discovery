@@ -8,6 +8,7 @@
 /bin/
 /dist/
 /.infrascout/
+/.qa/
 /inventory.json
 /snapshot.json
 /drift.json

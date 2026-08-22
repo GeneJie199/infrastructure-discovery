@@ -17,7 +17,8 @@ import (
 )
 
 func databaseCmd() *cobra.Command {
-	var engine, dsnEnv, out string
+	var engine, dsnEnv, out, stateDir string
+	var approveBaseline bool
 	var timeout time.Duration
 	cmd := &cobra.Command{Use: "database", Short: "Collect read-only PostgreSQL or MySQL structure and privilege metadata", RunE: func(cmd *cobra.Command, args []string) error {
 		dsn := os.Getenv(dsnEnv)
@@ -33,6 +34,16 @@ func databaseCmd() *cobra.Command {
 		if err = writeJSON(out, m); err != nil {
 			return err
 		}
+		if stateDir != "" {
+			diff, baselineCreated, stateErr := updateManagedDatabaseState(stateDir, m, approveBaseline)
+			if stateErr != nil {
+				return stateErr
+			}
+			if baselineCreated {
+				fmt.Fprintf(cmd.OutOrStdout(), "approved database baseline: %s\n", filepath.Join(stateDir, "database-baseline.json"))
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "database drift: %s, %d changes\n", diff.HighestRisk, len(diff.Added)+len(diff.Removed)+len(diff.Changed))
+		}
 		tables := 0
 		for _, s := range m.Schemas {
 			tables += len(s.Tables)
@@ -44,8 +55,44 @@ func databaseCmd() *cobra.Command {
 	cmd.Flags().StringVar(&dsnEnv, "dsn-env", "INFRASCOUT_DATABASE_DSN", "environment variable containing DSN")
 	cmd.Flags().StringVarP(&out, "output", "o", "database-metadata.json", "output JSON")
 	cmd.Flags().DurationVar(&timeout, "timeout", 30*time.Second, "read-only query timeout")
+	cmd.Flags().StringVar(&stateDir, "state-dir", "", "managed InfraScout state directory; enables database drift in the viewer")
+	cmd.Flags().BoolVar(&approveBaseline, "approve-baseline", false, "replace the approved database metadata baseline with this read-only collection")
 	_ = cmd.MarkFlagRequired("engine")
 	return cmd
+}
+
+func updateManagedDatabaseState(stateDir string, metadata dbmeta.Metadata, approveBaseline bool) (dbmeta.Diff, bool, error) {
+	baselinePath := filepath.Join(stateDir, "database-baseline.json")
+	var baseline dbmeta.Metadata
+	baselineExists := readJSONFileInto(baselinePath, &baseline) == nil
+	baselineCreated := approveBaseline || !baselineExists
+	if baselineCreated {
+		baseline = metadata
+		if err := writeState(stateDir, "database-baseline.json", baseline); err != nil {
+			return dbmeta.Diff{}, false, err
+		}
+	}
+	diff := dbmeta.Compare(baseline, metadata)
+	if err := writeState(stateDir, "database-current.json", metadata); err != nil {
+		return diff, baselineCreated, err
+	}
+	if err := writeState(stateDir, "database-diff.json", diff); err != nil {
+		return diff, baselineCreated, err
+	}
+	if _, statErr := os.Stat(filepath.Join(stateDir, "baseline.json")); statErr == nil {
+		if _, err := rebuildSavedDrift(stateDir, time.Now()); err != nil {
+			return diff, baselineCreated, err
+		}
+	}
+	return diff, baselineCreated, nil
+}
+
+func readJSONFileInto(path string, value any) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(data, value)
 }
 
 func databaseDiffCmd() *cobra.Command {
@@ -69,7 +116,7 @@ func databaseDiffCmd() *cobra.Command {
 				}
 				return dbmeta.Metadata{}, fmt.Errorf("invalid trailing JSON: %w", err)
 			}
-			if metadata.Version != "infrascout.database/v1" {
+			if metadata.Version != "infrascout.database/v1" && metadata.Version != "infrascout.database/v2" {
 				return dbmeta.Metadata{}, fmt.Errorf("unsupported database metadata version %q", metadata.Version)
 			}
 			return metadata, nil

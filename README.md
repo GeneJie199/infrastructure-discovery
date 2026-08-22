@@ -8,37 +8,35 @@ Linux 基础设施发现与漂移检测工具。它把主机上实际运行的�
 ## 可交付能力
 
 - 主机、CPU、内存、磁盘、网络接口、进程、监听端口和 systemd 服务发现。
+- `infrascout up` 一条命令完成首次扫描、批准基线、当前态、漂移报告、本地 Viewer 和自动打开浏览器。
 - Docker 容器、镜像、端口、网络、卷和 Compose 标签发现；权限不足转为 warning。
 - 静态解析 Nginx `server` / `listen` / `location` / `proxy_pass` 路由并写入资源关系。
-- PostgreSQL/MySQL 只读结构元数据：schema、表、字段、索引、视图、触发器、函数和权限。
+- PostgreSQL/MySQL 只读结构元数据 v2：schema、表、字段、PK/唯一/FK、索引、视图、触发器、函数、角色和多层权限。
 - 数据库结构 Diff，区分新增、删除、修改并给出风险级别。
-- 稳定 Resource ID，不把 PID 和容器临时 ID 当身份。
+- 标准化 Host、Process、Service、Deployment、Container、Database、Endpoint、Volume、Network、Relationship、Observation、Evidence 和 ChangeEvent；PID 和容器临时 ID 不参与稳定身份。
 - `scan`、`snapshot`、`baseline`、`check`、`watch`、`diff`、`report` 和 `serve` 完整流程。
 - 密钥、Token、常见密码变量和带凭据 URL 脱敏。
-- 响应式中文 Web 查看器与自包含离线 HTML 报告，无 Node/CDN 运行依赖。
+- 响应式中文 Web 查看器包含应用聚合、资源详情抽屉、关系证据、数据库漂移和 Observed/Approved/Desired 状态模型；无 Node/CDN 运行依赖。
 
 ## 快速开始
 
-需要 Go 1.26+。Linux 可实机采集，Windows/macOS 可用仓库夹具验证全部确定性逻辑。
+需要 Go 1.26.6+。Linux 可实机采集，Windows/macOS 可用仓库夹具验证全部确定性逻辑。
 
 ```bash
-go test ./...
 go build -trimpath -o infrascout ./cmd/infrascout
-
-./infrascout scan --fixture ./testdata/host-sample -o inventory.json
-./infrascout snapshot --fixture ./testdata/host-sample -o snapshot-old.json
-./infrascout snapshot --fixture ./testdata/host-sample-v2 -o snapshot-new.json
-./infrascout diff snapshot-old.json snapshot-new.json -j drift.json
-./infrascout serve --demo
+sudo ./infrascout up --state-dir /var/lib/infrascout
 ```
 
-打开 `http://127.0.0.1:8765/`。内置 demo 同时展示资产、风险、服务识别、监控建议、Nginx 路由、数据库结构和漂移。
+命令会自动打开 `http://127.0.0.1:8765/`。第一次运行创建批准基线，以后运行刷新当前事实和漂移。试用内置完整样例可执行 `./infrascout serve --demo`。
+无图形界面的服务器增加 `--no-open`，再通过 SSH 隧道访问本地 Viewer。
+
+发布包同时提供 `install.sh` 与 systemd unit。只安装二进制执行 `sudo ./install.sh ./infrascout-linux-amd64`；同时安装并启用后台服务执行 `sudo INSTALL_SERVICE=1 ./install.sh ./infrascout-linux-amd64`，完成首次 `up` 后再启动服务。
 
 ## 生产工作流
 
 ```bash
-# 1. 首次扫描并人工审核基线
-sudo infrascout baseline --state-dir /var/lib/infrascout
+# 1. 首次扫描、初始化基线并打开本地工作台
+sudo infrascout up --state-dir /var/lib/infrascout
 
 # 2. 发布前后检查；WARNING 及以上返回非零
 sudo infrascout check --state-dir /var/lib/infrascout --fail-on warning
@@ -58,31 +56,28 @@ sudo infrascout watch \
 
 ```bash
 export INFRASCOUT_DATABASE_DSN='postgres://monitor:...@127.0.0.1/app?sslmode=require'
-infrascout database --engine postgres -o database-before.json
-
-# 发布后再次采集
-infrascout database --engine postgres -o database-after.json
-infrascout database-diff database-before.json database-after.json -o database-diff.json
+infrascout database --engine postgres --state-dir /var/lib/infrascout
 ```
 
-Viewer 可和主机数据一起加载数据库元数据：
+也可以直接并入首次启动或持续采集：`infrascout up --database-engine postgres ...`，或为 `watch` 增加 `--database-engine postgres`；DSN 仍只从环境变量读取。
+
+第一次采集自动建立数据库元数据基线，以后同一条命令写入 `database-current.json` 和 `database-diff.json`，`up` / `serve --state-dir` 自动加载。明确批准新结构时执行：
 
 ```bash
-infrascout serve \
-  --inventory inventory.json \
-  --drift drift.json \
-  --database database-after.json
+infrascout database --engine postgres --state-dir /var/lib/infrascout --approve-baseline
 ```
+
+数据库变化会合并到统一 `drift.json`：可在 Web/CLI 使用同一套预期、批准、临时允许、待审核、禁止决策，`check --fail-on` 同时阻断主机、关系和数据库风险，已批准的单个字段/约束/角色/权限变化可以选择性提升。
 
 ## 输出
 
 | 文件 | 内容 |
 |---|---|
-| `inventory.json` | 资源、关系、服务识别、Nginx 路由、监控建议和 warnings |
+| `inventory.json` | 类型化资源、应用聚合、关系、证据、观测、Nginx 路由、监控建议和 warnings |
 | `snapshot.json` | 标准化、可比较的资源状态 |
-| `drift.json` | added/removed/changed、风险、摘要和时间 |
+| `drift.json` | 资源与关系的 added/removed/changed、ChangeEvent、风险、摘要和审核状态 |
 | `monitoring-plan.yaml` | 推荐采集器、目标、优先级和覆盖缺口 |
-| `database-*.json` | 数据库结构/权限元数据或结构 Diff |
+| `database-baseline.json` / `database-current.json` / `database-diff.json` | 数据库结构、约束、角色、权限和结构 Diff |
 | `infrascout-report.html` | 可离线打开的自包含报告 |
 
 ## 风险规则
@@ -107,6 +102,9 @@ endpoint:{host}/{proto}/{addr}/{port}
 service:systemd:{host}/{unit}
 service:docker:{host}/{name}
 nginx.route:{host}/{routeHash}
+deployment:{method}:{host}/{name}
+database:{engine}:{host}/{sourceHash}
+relationship:{source+type+targetHash}
 ```
 
 ## 安全与运行边界

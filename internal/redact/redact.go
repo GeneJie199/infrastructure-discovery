@@ -8,7 +8,9 @@ const replacement = "[REDACTED]"
 
 var patterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)(--?(?:password|passwd|token|secret|api[-_]?key|access[-_]?key|private[-_]?key|client[-_]?secret)(?:=|\s+))([^\s]+)`),
-	regexp.MustCompile(`(?i)((?:PASSWORD|PASSWD|TOKEN|SECRET|API_KEY|ACCESS_KEY|PRIVATE_KEY|CLIENT_SECRET)=)([^\s]+)`),
+	regexp.MustCompile(`(?i)((?:MYSQL_PWD|PGPASSWORD|PASSWORD|PASSWD|TOKEN|SECRET|API_KEY|ACCESS_KEY|PRIVATE_KEY|CLIENT_SECRET)=)([^\s]+)`),
+	regexp.MustCompile(`(?i)((?:^|\s)-p)([^\s]+)`),
+	regexp.MustCompile(`(?i)(\bBearer\s+)([^\s,;]+)`),
 	regexp.MustCompile(`(?i)(://[^\s:/@]+:)([^\s@]+)(@)`),
 }
 

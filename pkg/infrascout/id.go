@@ -48,8 +48,24 @@ func ServiceID(hostname, name string) string {
 func ContainerID(hostname, name string) string {
 	return fmt.Sprintf("service:docker:%s/%s", hostname, strings.TrimPrefix(strings.TrimSpace(name), "/"))
 }
+
+func DeploymentID(hostname, method, name string) string {
+	return fmt.Sprintf("deployment:%s:%s/%s", strings.ToLower(method), hostname, normalizePath(name))
+}
+
+func DatabaseID(hostname, engine, resourceID string) string {
+	sum := sha1.Sum([]byte(resourceID))
+	return fmt.Sprintf("database:%s:%s/%s", strings.ToLower(engine), hostname, hex.EncodeToString(sum[:8]))
+}
+
 func DockerNetworkID(hostname, name string) string {
 	return fmt.Sprintf("docker.network:%s/%s", hostname, normalizePath(name))
+}
+
+// RelationshipID is stable across scans and does not include volatile evidence.
+func RelationshipID(r Relationship) string {
+	sum := sha1.Sum([]byte(strings.Join([]string{r.Source, r.Type, r.Target}, "\x00")))
+	return "relationship:" + hex.EncodeToString(sum[:10])
 }
 func DockerVolumeID(hostname, source string) string {
 	sum := sha1.Sum([]byte(source))

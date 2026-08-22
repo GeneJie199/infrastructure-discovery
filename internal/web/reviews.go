@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/GeneJie199/infrastructure-discovery/internal/dbmeta"
 	"github.com/GeneJie199/infrastructure-discovery/pkg/infrascout"
 )
 
@@ -21,8 +22,10 @@ type reviewRequest struct {
 	ExpiresAt      string                         `json:"expires_at,omitempty"`
 }
 
+const mutationHeader = "X-InfraScout-Action"
+
 func (s *Server) handleReview(w http.ResponseWriter, r *http.Request) {
-	if !s.reviewsAllowed(w) {
+	if !s.reviewsAllowed(w, r) {
 		return
 	}
 	var input reviewRequest
@@ -69,7 +72,7 @@ func (s *Server) handleReview(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handlePromote(w http.ResponseWriter, r *http.Request) {
-	if !s.reviewsAllowed(w) {
+	if !s.reviewsAllowed(w, r) {
 		return
 	}
 	s.mu.Lock()
@@ -99,13 +102,38 @@ func (s *Server) handlePromote(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	infrascout.PromoteResource(&baseline, current, resourceID, kind)
-	baseline.Timestamp = infrascout.FormatTime(now)
-	if err := writeJSONAtomic(filepath.Join(s.cfg.StateDir, "baseline.json"), baseline); err != nil {
-		writeAPIError(w, http.StatusInternalServerError, err.Error())
-		return
+	if strings.HasPrefix(resourceID, "dbmeta:") {
+		var databaseBaseline, databaseCurrent dbmeta.Metadata
+		if err := readJSON(filepath.Join(s.cfg.StateDir, "database-baseline.json"), &databaseBaseline); err != nil {
+			writeAPIError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		if err := readJSON(filepath.Join(s.cfg.StateDir, "database-current.json"), &databaseCurrent); err != nil {
+			writeAPIError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		if err := dbmeta.PromoteChange(&databaseBaseline, databaseCurrent, resourceID, kind); err != nil {
+			writeAPIError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if err := writeJSONAtomic(filepath.Join(s.cfg.StateDir, "database-baseline.json"), databaseBaseline); err != nil {
+			writeAPIError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		if err := writeJSONAtomic(filepath.Join(s.cfg.StateDir, "database-diff.json"), dbmeta.Compare(databaseBaseline, databaseCurrent)); err != nil {
+			writeAPIError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+	} else {
+		infrascout.PromoteResource(&baseline, current, resourceID, kind)
+		baseline.Timestamp = infrascout.FormatTime(now)
+		if err := writeJSONAtomic(filepath.Join(s.cfg.StateDir, "baseline.json"), baseline); err != nil {
+			writeAPIError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
 	}
 	report = infrascout.Compare(baseline, current)
+	s.mergeDatabaseDrift(&report)
 	infrascout.ApplyDecisions(&report, decisions, now)
 	if err := writeJSONAtomic(filepath.Join(s.cfg.StateDir, "drift.json"), report); err != nil {
 		writeAPIError(w, http.StatusInternalServerError, err.Error())
@@ -114,7 +142,18 @@ func (s *Server) handlePromote(w http.ResponseWriter, r *http.Request) {
 	writeAPIJSON(w, report)
 }
 
-func (s *Server) reviewsAllowed(w http.ResponseWriter) bool {
+func (s *Server) mergeDatabaseDrift(report *infrascout.DiffReport) {
+	var databaseDiff dbmeta.Diff
+	if err := readJSON(filepath.Join(s.cfg.StateDir, "database-diff.json"), &databaseDiff); err == nil {
+		dbmeta.MergeIntoInfraReport(report, databaseDiff)
+	}
+}
+
+func (s *Server) reviewsAllowed(w http.ResponseWriter, r *http.Request) bool {
+	if r.Header.Get(mutationHeader) != "1" {
+		writeAPIError(w, http.StatusForbidden, "mutation request header is required")
+		return false
+	}
 	if s.cfg.StateDir == "" || s.cfg.Demo {
 		writeAPIError(w, http.StatusConflict, "start with --state-dir to enable reviews")
 		return false

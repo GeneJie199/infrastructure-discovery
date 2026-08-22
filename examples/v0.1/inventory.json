@@ -1,14 +1,68 @@
 {
-  "collected_at": "2026-08-12T09:36:56+08:00",
+  "collected_at": "2026-08-23T00:36:04+08:00",
   "hostname": "shop-prod-api-01",
   "summary": {
     "hosts": 1,
     "processes": 2,
     "endpoints": 2,
     "services": 3,
-    "nginx_routes": 1
+    "nginx_routes": 1,
+    "deployments": 3,
+    "applications": 2
   },
   "resources": [
+    {
+      "type": "deployment",
+      "id": "deployment:systemd:shop-prod-api-01/cron.service",
+      "deployment": {
+        "id": "deployment:systemd:shop-prod-api-01/cron.service",
+        "name": "cron.service",
+        "method": "systemd",
+        "location": "/lib/systemd/system/cron.service",
+        "command": "/usr/sbin/cron -f",
+        "user": "root",
+        "auto_start": "enabled",
+        "restart_command": "systemctl restart cron.service",
+        "config_files": [
+          "/lib/systemd/system/cron.service"
+        ]
+      }
+    },
+    {
+      "type": "deployment",
+      "id": "deployment:systemd:shop-prod-api-01/nginx.service",
+      "deployment": {
+        "id": "deployment:systemd:shop-prod-api-01/nginx.service",
+        "name": "nginx.service",
+        "method": "systemd",
+        "location": "/lib/systemd/system/nginx.service",
+        "command": "/usr/sbin/nginx -g 'daemon on; master_process on;'",
+        "working_directory": "/",
+        "user": "root",
+        "auto_start": "enabled",
+        "restart_command": "systemctl restart nginx.service",
+        "config_files": [
+          "/lib/systemd/system/nginx.service"
+        ]
+      }
+    },
+    {
+      "type": "deployment",
+      "id": "deployment:systemd:shop-prod-api-01/ssh.service",
+      "deployment": {
+        "id": "deployment:systemd:shop-prod-api-01/ssh.service",
+        "name": "ssh.service",
+        "method": "systemd",
+        "location": "/lib/systemd/system/ssh.service",
+        "command": "/usr/sbin/sshd -D",
+        "user": "root",
+        "auto_start": "enabled",
+        "restart_command": "systemctl restart ssh.service",
+        "config_files": [
+          "/lib/systemd/system/ssh.service"
+        ]
+      }
+    },
     {
       "type": "endpoint",
       "id": "endpoint:shop-prod-api-01/tcp/*/22",
@@ -85,7 +139,7 @@
             "state": "down"
           }
         ],
-        "collected_at": "2026-08-12T09:36:56+08:00"
+        "collected_at": "2026-08-23T00:36:04+08:00"
       }
     },
     {
@@ -140,8 +194,18 @@
         "sub_state": "dead",
         "exec_start": "/usr/sbin/cron -f",
         "user": "root",
-        "description": "Regular background program processing daemon"
-      }
+        "description": "Regular background program processing daemon",
+        "auto_start": "enabled",
+        "unit_file": "/lib/systemd/system/cron.service"
+      },
+      "evidence": [
+        {
+          "id": "evidence:service_systemd_shop-prod-api-01_cron_service:systemd",
+          "resource_id": "service:systemd:shop-prod-api-01/cron.service",
+          "source": "systemctl",
+          "detail": "/lib/systemd/system/cron.service"
+        }
+      ]
     },
     {
       "type": "service",
@@ -158,8 +222,18 @@
         "working_directory": "/",
         "user": "root",
         "main_pid": 1200,
-        "description": "A high performance web server and a reverse proxy server"
-      }
+        "description": "A high performance web server and a reverse proxy server",
+        "auto_start": "enabled",
+        "unit_file": "/lib/systemd/system/nginx.service"
+      },
+      "evidence": [
+        {
+          "id": "evidence:service_systemd_shop-prod-api-01_nginx_service:systemd",
+          "resource_id": "service:systemd:shop-prod-api-01/nginx.service",
+          "source": "systemctl",
+          "detail": "/lib/systemd/system/nginx.service"
+        }
+      ]
     },
     {
       "type": "service",
@@ -175,76 +249,23 @@
         "exec_start": "/usr/sbin/sshd -D",
         "user": "root",
         "main_pid": 800,
-        "description": "OpenBSD Secure Shell server"
-      }
+        "description": "OpenBSD Secure Shell server",
+        "auto_start": "enabled",
+        "unit_file": "/lib/systemd/system/ssh.service"
+      },
+      "evidence": [
+        {
+          "id": "evidence:service_systemd_shop-prod-api-01_ssh_service:systemd",
+          "resource_id": "service:systemd:shop-prod-api-01/ssh.service",
+          "source": "systemctl",
+          "detail": "/lib/systemd/system/ssh.service"
+        }
+      ]
     }
   ],
   "relationships": [
     {
-      "source": "nginx.route:shop-prod-api-01/cfab9b5a34364bf9",
-      "target": "host:shop-prod-api-01",
-      "type": "configured_on",
-      "confidence": 1,
-      "evidence": [
-        "testdata\\host-sample\\nginx\\nginx.conf"
-      ]
-    },
-    {
-      "source": "host:shop-prod-api-01",
-      "target": "endpoint:shop-prod-api-01/tcp/*/22",
-      "type": "listens_on",
-      "confidence": 1,
-      "evidence": [
-        "procfs:/proc/net"
-      ]
-    },
-    {
-      "source": "host:shop-prod-api-01",
-      "target": "endpoint:shop-prod-api-01/tcp/*/80",
-      "type": "listens_on",
-      "confidence": 1,
-      "evidence": [
-        "procfs:/proc/net"
-      ]
-    },
-    {
-      "source": "process:shop-prod-api-01/nginx@b7ca766ee1bd",
-      "target": "endpoint:shop-prod-api-01/tcp/*/80",
-      "type": "listens_on",
-      "confidence": 0.9,
-      "evidence": [
-        "socket inode mapped to pid 1200"
-      ]
-    },
-    {
-      "source": "process:shop-prod-api-01/sshd/sshd",
-      "target": "endpoint:shop-prod-api-01/tcp/*/22",
-      "type": "listens_on",
-      "confidence": 0.9,
-      "evidence": [
-        "socket inode mapped to pid 800"
-      ]
-    },
-    {
-      "source": "process:shop-prod-api-01/nginx@b7ca766ee1bd",
-      "target": "host:shop-prod-api-01",
-      "type": "runs_on",
-      "confidence": 1,
-      "evidence": [
-        "procfs"
-      ]
-    },
-    {
-      "source": "process:shop-prod-api-01/sshd/sshd",
-      "target": "host:shop-prod-api-01",
-      "type": "runs_on",
-      "confidence": 1,
-      "evidence": [
-        "procfs"
-      ]
-    },
-    {
-      "source": "service:systemd:shop-prod-api-01/cron.service",
+      "source": "service:systemd:shop-prod-api-01/ssh.service",
       "target": "host:shop-prod-api-01",
       "type": "runs_on",
       "confidence": 1,
@@ -262,12 +283,129 @@
       ]
     },
     {
-      "source": "service:systemd:shop-prod-api-01/ssh.service",
+      "source": "process:shop-prod-api-01/sshd/sshd",
+      "target": "endpoint:shop-prod-api-01/tcp/*/22",
+      "type": "listens_on",
+      "confidence": 0.9,
+      "evidence": [
+        "socket inode mapped to pid 800"
+      ]
+    },
+    {
+      "source": "service:systemd:shop-prod-api-01/cron.service",
       "target": "host:shop-prod-api-01",
       "type": "runs_on",
       "confidence": 1,
       "evidence": [
         "systemctl"
+      ]
+    },
+    {
+      "source": "nginx.route:shop-prod-api-01/cfab9b5a34364bf9",
+      "target": "host:shop-prod-api-01",
+      "type": "configured_on",
+      "confidence": 1,
+      "evidence": [
+        "testdata\\host-sample\\nginx\\nginx.conf"
+      ]
+    },
+    {
+      "source": "service:systemd:shop-prod-api-01/nginx.service",
+      "target": "deployment:systemd:shop-prod-api-01/nginx.service",
+      "type": "deployed_as",
+      "confidence": 1,
+      "evidence": [
+        "systemctl show"
+      ]
+    },
+    {
+      "source": "deployment:systemd:shop-prod-api-01/nginx.service",
+      "target": "host:shop-prod-api-01",
+      "type": "runs_on",
+      "confidence": 1,
+      "evidence": [
+        "systemctl show"
+      ]
+    },
+    {
+      "source": "process:shop-prod-api-01/sshd/sshd",
+      "target": "host:shop-prod-api-01",
+      "type": "runs_on",
+      "confidence": 1,
+      "evidence": [
+        "procfs"
+      ]
+    },
+    {
+      "source": "process:shop-prod-api-01/nginx@b7ca766ee1bd",
+      "target": "endpoint:shop-prod-api-01/tcp/*/80",
+      "type": "listens_on",
+      "confidence": 0.9,
+      "evidence": [
+        "socket inode mapped to pid 1200"
+      ]
+    },
+    {
+      "source": "host:shop-prod-api-01",
+      "target": "endpoint:shop-prod-api-01/tcp/*/22",
+      "type": "listens_on",
+      "confidence": 1,
+      "evidence": [
+        "procfs:/proc/net"
+      ]
+    },
+    {
+      "source": "host:shop-prod-api-01",
+      "target": "endpoint:shop-prod-api-01/tcp/*/80",
+      "type": "listens_on",
+      "confidence": 1,
+      "evidence": [
+        "procfs:/proc/net"
+      ]
+    },
+    {
+      "source": "service:systemd:shop-prod-api-01/ssh.service",
+      "target": "deployment:systemd:shop-prod-api-01/ssh.service",
+      "type": "deployed_as",
+      "confidence": 1,
+      "evidence": [
+        "systemctl show"
+      ]
+    },
+    {
+      "source": "deployment:systemd:shop-prod-api-01/cron.service",
+      "target": "host:shop-prod-api-01",
+      "type": "runs_on",
+      "confidence": 1,
+      "evidence": [
+        "systemctl show"
+      ]
+    },
+    {
+      "source": "service:systemd:shop-prod-api-01/cron.service",
+      "target": "deployment:systemd:shop-prod-api-01/cron.service",
+      "type": "deployed_as",
+      "confidence": 1,
+      "evidence": [
+        "systemctl show"
+      ]
+    },
+    {
+      "source": "deployment:systemd:shop-prod-api-01/ssh.service",
+      "target": "host:shop-prod-api-01",
+      "type": "runs_on",
+      "confidence": 1,
+      "evidence": [
+        "systemctl show"
+      ]
+    },
+    {
+      "source": "process:shop-prod-api-01/nginx@b7ca766ee1bd",
+      "target": "host:shop-prod-api-01",
+      "type": "runs_on",
+      "confidence": 1,
+      "evidence": [
+        "procfs"
       ]
     }
   ],
@@ -292,7 +430,7 @@
   ],
   "monitoring_plan": {
     "version": "infrascout.monitoring/v1",
-    "generated_at": "2026-08-12T09:36:56+08:00",
+    "generated_at": "2026-08-23T00:36:04+08:00",
     "hostname": "shop-prod-api-01",
     "recommendations": [
       {
@@ -300,18 +438,18 @@
         "target_id": "host:shop-prod-api-01",
         "collector": "fleetscope/system",
         "priority": "required",
-          "reason": "collect host CPU, memory, disk, load, and network telemetry with the FleetScope native agent"
+        "reason": "collect host CPU, memory, disk, load, and network telemetry with the FleetScope native agent"
       },
       {
         "id": "monitor.process_shop-prod-api-01_nginx@b7ca766ee1bd",
         "target_id": "process:shop-prod-api-01/nginx@b7ca766ee1bd",
         "collector": "fleetscope/nginx",
         "priority": "required",
-          "reason": "collect connections, request rates, and upstream failures from the native Nginx status endpoint",
+        "reason": "collect connections, request rates, and upstream failures from the native Nginx status endpoint",
         "parameters": {
           "endpoints": "tcp/0.0.0.0:80"
         }
-        }
+      }
     ],
     "coverage_gaps": [
       "public endpoint endpoint:shop-prod-api-01/tcp/*/22 has no recognized service-specific collector"
@@ -324,6 +462,94 @@
       "listen": "443 ssl",
       "location": "/api/",
       "upstream": "http://127.0.0.1:8080"
+    }
+  ],
+  "applications": [
+    {
+      "id": "application:process_shop-prod-api-01_nginx@b7ca766ee1bd",
+      "name": "nginx",
+      "kind": "nginx",
+      "source": "process",
+      "confidence": 0.95,
+      "resource_ids": [
+        "process:shop-prod-api-01/nginx@b7ca766ee1bd"
+      ],
+      "endpoint_ids": [
+        "endpoint:shop-prod-api-01/tcp/*/80"
+      ],
+      "evidence_summary": [
+        "deterministic process/service signature"
+      ]
+    },
+    {
+      "id": "application:service_systemd_shop-prod-api-01_nginx_service",
+      "name": "nginx.service",
+      "kind": "nginx",
+      "source": "systemd",
+      "confidence": 0.95,
+      "status": "active / running",
+      "resource_ids": [
+        "service:systemd:shop-prod-api-01/nginx.service"
+      ],
+      "deployment_ids": [
+        "deployment:systemd:shop-prod-api-01/nginx.service"
+      ],
+      "endpoint_ids": [
+        "endpoint:shop-prod-api-01/tcp/*/80"
+      ],
+      "restart_command": "systemctl restart nginx.service",
+      "evidence_summary": [
+        "deterministic process/service signature"
+      ]
+    }
+  ],
+  "evidence": [
+    {
+      "id": "evidence:service_systemd_shop-prod-api-01_cron_service:systemd",
+      "resource_id": "service:systemd:shop-prod-api-01/cron.service",
+      "source": "systemctl",
+      "detail": "/lib/systemd/system/cron.service"
+    },
+    {
+      "id": "evidence:service_systemd_shop-prod-api-01_nginx_service:systemd",
+      "resource_id": "service:systemd:shop-prod-api-01/nginx.service",
+      "source": "systemctl",
+      "detail": "/lib/systemd/system/nginx.service"
+    },
+    {
+      "id": "evidence:service_systemd_shop-prod-api-01_ssh_service:systemd",
+      "resource_id": "service:systemd:shop-prod-api-01/ssh.service",
+      "source": "systemctl",
+      "detail": "/lib/systemd/system/ssh.service"
+    }
+  ],
+  "observations": [
+    {
+      "id": "observation:service_systemd_shop-prod-api-01_cron_service",
+      "resource_id": "service:systemd:shop-prod-api-01/cron.service",
+      "observed_at": "2026-08-23T00:36:04+08:00",
+      "facts": {
+        "type": "service"
+      },
+      "evidence_id": "evidence:service_systemd_shop-prod-api-01_cron_service:systemd"
+    },
+    {
+      "id": "observation:service_systemd_shop-prod-api-01_nginx_service",
+      "resource_id": "service:systemd:shop-prod-api-01/nginx.service",
+      "observed_at": "2026-08-23T00:36:04+08:00",
+      "facts": {
+        "type": "service"
+      },
+      "evidence_id": "evidence:service_systemd_shop-prod-api-01_nginx_service:systemd"
+    },
+    {
+      "id": "observation:service_systemd_shop-prod-api-01_ssh_service",
+      "resource_id": "service:systemd:shop-prod-api-01/ssh.service",
+      "observed_at": "2026-08-23T00:36:04+08:00",
+      "facts": {
+        "type": "service"
+      },
+      "evidence_id": "evidence:service_systemd_shop-prod-api-01_ssh_service:systemd"
     }
   ]
 }

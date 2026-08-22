@@ -8,7 +8,7 @@ import (
 )
 
 func serveCmd() *cobra.Command {
-	var addr, inventoryPath, snapshotPath, driftPath, databasePath, stateDir string
+	var addr, inventoryPath, snapshotPath, driftPath, databasePath, databaseDiffPath, stateDir string
 	var demo, allowRemote bool
 	cmd := &cobra.Command{
 		Use:   "serve",
@@ -20,14 +20,15 @@ func serveCmd() *cobra.Command {
 			"  infrascout serve --addr 127.0.0.1:9000 --snapshot snapshot.json",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return web.Serve(web.Config{
-				Addr:          addr,
-				InventoryPath: inventoryPath,
-				SnapshotPath:  snapshotPath,
-				DriftPath:     driftPath,
-				DatabasePath:  databasePath,
-				StateDir:      stateDir,
-				Demo:          demo,
-				AllowRemote:   allowRemote,
+				Addr:             addr,
+				InventoryPath:    inventoryPath,
+				SnapshotPath:     snapshotPath,
+				DriftPath:        driftPath,
+				DatabasePath:     databasePath,
+				DatabaseDiffPath: databaseDiffPath,
+				StateDir:         stateDir,
+				Demo:             demo,
+				AllowRemote:      allowRemote,
 			}, func(format string, args ...any) {
 				fmt.Fprintf(cmd.OutOrStdout(), format+"\n", args...)
 			})
@@ -38,6 +39,7 @@ func serveCmd() *cobra.Command {
 	cmd.Flags().StringVar(&snapshotPath, "snapshot", "", "path to snapshot.json from 'infrascout snapshot'")
 	cmd.Flags().StringVar(&driftPath, "drift", "", "path to drift DiffReport JSON from 'infrascout diff -j'")
 	cmd.Flags().StringVar(&databasePath, "database", "", "path to database metadata JSON from 'infrascout database'")
+	cmd.Flags().StringVar(&databaseDiffPath, "database-diff", "", "path to database drift JSON from 'infrascout database-diff'")
 	cmd.Flags().StringVar(&stateDir, "state-dir", "", "managed state directory; enables review and selective baseline promotion")
 	cmd.Flags().BoolVar(&demo, "demo", false, "load embedded fixture demo instead of files")
 	cmd.Flags().BoolVar(&allowRemote, "allow-remote", false, "allow non-loopback read-only viewing; review and promotion APIs stay disabled")

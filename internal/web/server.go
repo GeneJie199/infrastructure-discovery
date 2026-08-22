@@ -24,19 +24,20 @@ import (
 //go:embed static
 var staticFS embed.FS
 
-//go:embed demo/inventory.json demo/snapshot.json demo/drift.json demo/database.json
+//go:embed demo/inventory.json demo/snapshot.json demo/drift.json demo/database.json demo/database-diff.json
 var demoFS embed.FS
 
 // Config controls the serve command.
 type Config struct {
-	Addr          string // listen address, e.g. 127.0.0.1:8080
-	InventoryPath string // path to inventory.json (optional)
-	SnapshotPath  string // path to snapshot.json (optional)
-	DriftPath     string // path to drift DiffReport JSON (optional)
-	DatabasePath  string // path to database-metadata.json (optional)
-	StateDir      string // managed baseline/current/drift/decisions directory
-	Demo          bool   // load embedded fixture demo instead of files
-	AllowRemote   bool   // permit a non-loopback listen address
+	Addr             string // listen address, e.g. 127.0.0.1:8080
+	InventoryPath    string // path to inventory.json (optional)
+	SnapshotPath     string // path to snapshot.json (optional)
+	DriftPath        string // path to drift DiffReport JSON (optional)
+	DatabasePath     string // path to database-metadata.json (optional)
+	DatabaseDiffPath string // path to database drift JSON (optional)
+	StateDir         string // managed baseline/current/drift/decisions directory
+	Demo             bool   // load embedded fixture demo instead of files
+	AllowRemote      bool   // permit a non-loopback listen address
 }
 
 // payload is the single JSON document consumed by the frontend.
@@ -48,6 +49,7 @@ type payload struct {
 	Snapshot      json.RawMessage   `json:"snapshot,omitempty"`
 	Drift         json.RawMessage   `json:"drift,omitempty"`
 	Database      json.RawMessage   `json:"database,omitempty"`
+	DatabaseDiff  json.RawMessage   `json:"database_diff,omitempty"`
 	ReviewEnabled bool              `json:"review_enabled"`
 }
 
@@ -72,6 +74,12 @@ func Load(cfg Config) (*Server, error) {
 		if cfg.DriftPath == "" {
 			cfg.DriftPath = filepath.Join(cfg.StateDir, "drift.json")
 		}
+		if cfg.DatabasePath == "" && fileExists(filepath.Join(cfg.StateDir, "database-current.json")) {
+			cfg.DatabasePath = filepath.Join(cfg.StateDir, "database-current.json")
+		}
+		if cfg.DatabaseDiffPath == "" && fileExists(filepath.Join(cfg.StateDir, "database-diff.json")) {
+			cfg.DatabaseDiffPath = filepath.Join(cfg.StateDir, "database-diff.json")
+		}
 	}
 	s := &Server{
 		cfg: cfg,
@@ -86,7 +94,7 @@ func Load(cfg Config) (*Server, error) {
 			return nil, err
 		}
 	} else {
-		if cfg.InventoryPath == "" && cfg.SnapshotPath == "" && cfg.DriftPath == "" && cfg.DatabasePath == "" {
+		if cfg.InventoryPath == "" && cfg.SnapshotPath == "" && cfg.DriftPath == "" && cfg.DatabasePath == "" && cfg.DatabaseDiffPath == "" {
 			return nil, fmt.Errorf("nothing to serve: pass --inventory/--snapshot/--drift or use --demo")
 		}
 		if err := s.loadFiles(cfg); err != nil {
@@ -130,10 +138,33 @@ func (s *Server) loadDemo() error {
 	s.data.Snapshot = snap
 	s.data.Drift = drift
 	s.data.Database = database
+	databaseDiff, err := demoFS.ReadFile("demo/database-diff.json")
+	if err != nil {
+		return err
+	}
+	if err := validate(databaseDiff, &dbmeta.Diff{}); err != nil {
+		return fmt.Errorf("demo database diff: %w", err)
+	}
+	var demoReport infrascout.DiffReport
+	var demoDatabaseDiff dbmeta.Diff
+	if err := json.Unmarshal(drift, &demoReport); err != nil {
+		return err
+	}
+	if err := json.Unmarshal(databaseDiff, &demoDatabaseDiff); err != nil {
+		return err
+	}
+	dbmeta.MergeIntoInfraReport(&demoReport, demoDatabaseDiff)
+	drift, err = json.Marshal(demoReport)
+	if err != nil {
+		return err
+	}
+	s.data.Drift = drift
+	s.data.DatabaseDiff = databaseDiff
 	s.data.Sources["inventory"] = "embedded demo"
 	s.data.Sources["snapshot"] = "embedded demo"
 	s.data.Sources["drift"] = "embedded demo"
 	s.data.Sources["database"] = "embedded demo"
+	s.data.Sources["database_diff"] = "embedded demo"
 	return nil
 }
 
@@ -163,6 +194,9 @@ func (s *Server) loadFiles(cfg Config) error {
 		return err
 	}
 	if err := load(cfg.DatabasePath, &dbmeta.Metadata{}, &s.data.Database, "database"); err != nil {
+		return err
+	}
+	if err := load(cfg.DatabaseDiffPath, &dbmeta.Diff{}, &s.data.DatabaseDiff, "database_diff"); err != nil {
 		return err
 	}
 	if cfg.StateDir != "" {
@@ -239,8 +273,9 @@ func (s *Server) handleDataRequest(w http.ResponseWriter, r *http.Request) {
 		Snapshot      json.RawMessage
 		Drift         json.RawMessage
 		Database      json.RawMessage
+		DatabaseDiff  json.RawMessage
 		ReviewEnabled bool
-	}{data.Sources, data.Inventory, data.Snapshot, data.Drift, data.Database, data.ReviewEnabled})
+	}{data.Sources, data.Inventory, data.Snapshot, data.Drift, data.Database, data.DatabaseDiff, data.ReviewEnabled})
 	revision := fmt.Sprintf("\"%x\"", sha256.Sum256(revisionData))
 	w.Header().Set("ETag", revision)
 	if r != nil && r.Header.Get("If-None-Match") == revision {
@@ -249,6 +284,11 @@ func (s *Server) handleDataRequest(w http.ResponseWriter, r *http.Request) {
 	}
 	data.GeneratedAt = time.Now().Format(time.RFC3339)
 	writeAPIJSON(w, data)
+}
+
+func fileExists(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && !info.IsDir()
 }
 
 // Handler returns the HTTP handler (used by tests and Serve).

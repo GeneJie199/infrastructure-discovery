@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.0 - 2026-08-23
+
+- Add `infrascout up` for one-command discovery, state initialization, drift refresh, local serving, and browser launch.
+- Standardize deployments, containers, databases, networks, volumes, observations, evidence, relationships, and change events while retaining v0.x service compatibility.
+- Diff relationship topology and allow relationship changes through the existing review and selective baseline-promotion workflow.
+- Link Nginx routes to discovered upstream endpoints and capture systemd auto-start/restart/unit facts plus Docker restart policy.
+- Upgrade PostgreSQL/MySQL read-only metadata to v2 with PK, unique and foreign-key constraints, roles, broader privileges, managed database drift state, unified five-state review, release blocking, and selective promotion.
+- Rebuild the embedded viewer around applications, resource dossiers, exposure and dependency evidence, unified state semantics, complete database catalogs, and responsive offline Lucide icons.
+- Raise the minimum Go version to 1.26.6.
+
 ## 0.3.2 - 2026-08-13
 
 - Add consistent visual product marks to the suite switcher while retaining InfraScout's dense risk-focused navigation.

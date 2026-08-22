@@ -9,20 +9,22 @@
 <body>
 <header class="topbar">
   <div class="product-brand"><span class="suite-kicker">AI DEVOPS OPEN SUITE</span><div><strong class="product-name">InfraScout</strong><span class="product-subtitle">资产事实与漂移</span></div></div>
-  <div class="sync-tools"><details class="suite-switcher"><summary>模块</summary><div class="suite-menu"><a data-suite="devcycle">DevCycle<span>研发交付</span></a><a data-suite="infrascout" class="current">InfraScout<span>基础设施发现</span></a><a data-suite="fleetscope">FleetScope<span>原生监控</span></a><a data-suite="releaseguard">ReleaseGuard<span>发布门禁</span></a></div></details><span id="sync-state" class="sync-state"><i></i><span>正在读取</span></span><button id="refresh" class="icon-command" type="button" title="立即刷新" aria-label="立即刷新">↻</button></div>
+  <div class="sync-tools"><details class="suite-switcher"><summary><i data-lucide="blocks"></i><span>模块</span></summary><div class="suite-menu"><a data-suite="devcycle">DevCycle<span>研发交付</span></a><a data-suite="infrascout" class="current">InfraScout<span>基础设施发现</span></a><a data-suite="fleetscope">FleetScope<span>原生监控</span></a><a data-suite="releaseguard">ReleaseGuard<span>发布门禁</span></a></div></details><span id="sync-state" class="sync-state"><i></i><span>正在读取</span></span><button id="refresh" class="icon-command" type="button" title="立即刷新" aria-label="立即刷新"><i data-lucide="refresh-cw"></i></button></div>
 </header>
 <nav class="tabs" id="tabs" aria-label="基础设施视图" role="tablist">
-  <button data-tab="overview" class="active" role="tab" aria-controls="tab-overview">风险驾驶舱</button>
-  <button data-tab="resources" role="tab" aria-controls="tab-resources">资产清单</button>
-  <button data-tab="ports" role="tab" aria-controls="tab-ports">暴露面</button>
-  <button data-tab="monitoring" role="tab" aria-controls="tab-monitoring">采集计划</button>
-  <button data-tab="database" role="tab" aria-controls="tab-database">数据库</button>
-  <button data-tab="drift" role="tab" aria-controls="tab-drift">变更 <span id="drift-tab-badge" class="tab-badge hidden">0</span></button>
+  <button data-tab="overview" class="active" role="tab" aria-controls="tab-overview"><i data-lucide="layout-dashboard"></i><span>总览</span></button>
+  <button data-tab="applications" role="tab" aria-controls="tab-applications"><i data-lucide="boxes"></i><span>应用</span></button>
+  <button data-tab="resources" role="tab" aria-controls="tab-resources"><i data-lucide="server"></i><span>资产</span></button>
+  <button data-tab="ports" role="tab" aria-controls="tab-ports"><i data-lucide="route"></i><span>暴露与依赖</span></button>
+  <button data-tab="drift" role="tab" aria-controls="tab-drift"><i data-lucide="git-compare-arrows"></i><span>变更</span><span id="drift-tab-badge" class="tab-badge hidden">0</span></button>
+  <button data-tab="database" role="tab" aria-controls="tab-database"><i data-lucide="database"></i><span>数据库</span></button>
+  <button data-tab="monitoring" role="tab" aria-controls="tab-monitoring"><i data-lucide="plug-zap"></i><span>FleetScope</span></button>
 </nav>
 <div id="stale-banner" class="stale-banner hidden" role="alert"></div>
 <main id="main">
   <div id="status" class="status"><span>正在加载基础设施事实…</span><button id="retry" class="chip hidden" type="button">重试</button></div>
   <section id="tab-overview" class="tabpage" role="tabpanel" tabindex="-1"></section>
+  <section id="tab-applications" class="tabpage hidden" role="tabpanel" tabindex="-1"></section>
   <section id="tab-resources" class="tabpage hidden" role="tabpanel" tabindex="-1"></section>
   <section id="tab-ports" class="tabpage hidden" role="tabpanel" tabindex="-1"></section>
   <section id="tab-monitoring" class="tabpage hidden" role="tabpanel" tabindex="-1"></section>
@@ -60,8 +62,12 @@
     <div class="dialog-actions"><button id="promote-cancel" type="button">取消</button><button id="promote-submit" class="danger-command" type="submit" disabled>确认提升</button></div>
   </form>
 </dialog>
+<dialog id="resource-dialog" class="resource-dialog">
+  <div class="resource-drawer"><div class="dialog-head"><div><span class="eyebrow" id="resource-kind">资产档案</span><h2 id="resource-title">资源详情</h2><p id="resource-subtitle"></p></div><button id="resource-close" class="icon-command" type="button" title="关闭" aria-label="关闭"><i data-lucide="x"></i></button></div><div id="resource-body" class="resource-body"></div></div>
+</dialog>
 <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
 <script src="/static/suite.js"></script>
+<script src="/static/vendor/lucide.min.js"></script>
 <script src="/static/app.js"></script>
 </body>
 </html>

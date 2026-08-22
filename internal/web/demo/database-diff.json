@@ -1,0 +1,14 @@
+{
+  "version": "infrascout.database-diff/v2",
+  "compared_at": "2026-08-12T02:15:00Z",
+  "engine": "postgresql",
+  "highest_risk": "CRITICAL",
+  "added": [
+    {"kind":"constraint","id":"constraint:public.orders.orders_customer_fk","severity":"WARNING","value":{"schema":"public","table":"orders","name":"orders_customer_fk","type":"FOREIGN KEY","columns":["customer_id"],"reference_schema":"public","reference_table":"customers","reference_columns":["id"]}}
+  ],
+  "removed": [
+    {"kind":"privilege","id":"privilege:app_reader.SELECT.public.orders","severity":"CRITICAL","value":{"schema":"app_reader","name":"SELECT","type":"public.orders"}}
+  ],
+  "changed": [],
+  "unchanged_count": 18
+}

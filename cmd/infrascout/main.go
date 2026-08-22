@@ -18,7 +18,7 @@ func main() {
 		Short: "InfraScout — Linux infrastructure discovery and drift detection",
 		Long:  "Discover hosts, processes, listening ports, systemd services, and Docker containers. Build approved baselines, gate releases, and inspect drift locally without AI or remote control.",
 	}
-	root.AddCommand(scanCmd(), snapshotCmd(), baselineCmd(), checkCmd(), reviewCmd(), promoteCmd(), watchCmd(), diffCmd(), reportCmd(), databaseCmd(), databaseDiffCmd(), serveCmd(), versionCmd())
+	root.AddCommand(upCmd(), scanCmd(), snapshotCmd(), baselineCmd(), checkCmd(), reviewCmd(), promoteCmd(), watchCmd(), diffCmd(), reportCmd(), databaseCmd(), databaseDiffCmd(), serveCmd(), versionCmd())
 	if err := root.Execute(); err != nil {
 		os.Exit(1)
 	}

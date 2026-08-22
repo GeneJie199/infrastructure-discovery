@@ -2,9 +2,11 @@ package infrascout
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -145,6 +147,7 @@ func Discover(opts ScanOptions) (*ScanResult, error) {
 
 	for _, u := range units {
 		sid := ServiceID(hostname, u.Name)
+		deploymentID := DeploymentID(hostname, "systemd", u.Name)
 		svc := &Service{
 			ID:               sid,
 			Name:             u.Name,
@@ -158,8 +161,14 @@ func Discover(opts ScanOptions) (*ScanResult, error) {
 			User:             u.User,
 			MainPID:          u.MainPID,
 			Description:      u.Description,
+			RestartPolicy:    u.Restart,
+			AutoStart:        u.UnitFileState,
+			UnitFile:         u.FragmentPath,
 		}
-		resources = append(resources, Resource{Type: "service", ID: sid, Service: svc})
+		resources = append(resources,
+			Resource{Type: "service", ID: sid, Service: svc, Evidence: []Evidence{{ID: "evidence:" + sanitizeID(sid) + ":systemd", ResourceID: sid, Source: "systemctl", Detail: u.FragmentPath}}},
+			Resource{Type: "deployment", ID: deploymentID, Deployment: &Deployment{ID: deploymentID, Name: u.Name, Method: "systemd", Location: u.FragmentPath, Command: svc.ExecStart, WorkingDirectory: svc.WorkingDirectory, User: svc.User, AutoStart: svc.AutoStart, RestartPolicy: svc.RestartPolicy, RestartCommand: "systemctl restart " + u.Name, ConfigFiles: nonEmptyStrings(u.FragmentPath)}},
+		)
 		rels = append(rels, Relationship{
 			Source:     sid,
 			Target:     hostID,
@@ -167,34 +176,53 @@ func Discover(opts ScanOptions) (*ScanResult, error) {
 			Confidence: 1.0,
 			Evidence:   []string{"systemctl"},
 		})
+		rels = append(rels,
+			Relationship{Source: sid, Target: deploymentID, Type: "deployed_as", Confidence: 1, Evidence: []string{"systemctl show"}},
+			Relationship{Source: deploymentID, Target: hostID, Type: "runs_on", Confidence: 1, Evidence: []string{"systemctl show"}},
+		)
 	}
 
 	for _, c := range containers {
 		sid := ContainerID(hostname, c.Name)
+		deploymentName := c.Name
+		deploymentMethod := "docker"
+		if project := composeProject(c.Labels); project != "" {
+			deploymentName = project
+			deploymentMethod = "compose"
+		}
+		deploymentID := DeploymentID(hostname, deploymentMethod, deploymentName)
 		svc := &Service{
 			ID: sid, Name: c.Name, Type: "container", DeploymentType: DeployDocker,
 			Source: "docker", ActiveState: c.State, SubState: c.Status,
 			ExecStart: redact.CommandLine(c.Command), ContainerID: c.ID,
 			Image: c.Image, Status: c.Status, Ports: c.Ports,
 			ComposeProject: composeProject(c.Labels),
-			Health:         c.Health, RestartCount: c.RestartCount, Networks: c.Networks,
+			Health:         c.Health, RestartCount: c.RestartCount, RestartPolicy: c.RestartPolicy, AutoStart: dockerAutoStart(c.RestartPolicy), Networks: c.Networks,
 		}
 		for _, m := range c.Mounts {
 			svc.Mounts = append(svc.Mounts, ContainerMount{Type: m.Type, Source: m.Source, Destination: m.Destination, Mode: m.Mode})
 		}
-		resources = append(resources, Resource{Type: "service", ID: sid, Service: svc})
+		container := &Container{ID: sid, Name: c.Name, RuntimeID: c.ID, Image: c.Image, Command: svc.ExecStart, State: c.State, Health: c.Health, RestartPolicy: c.RestartPolicy, ComposeProject: svc.ComposeProject, Networks: append([]string(nil), c.Networks...), Mounts: append([]ContainerMount(nil), svc.Mounts...)}
+		resources = append(resources,
+			Resource{Type: "service", ID: sid, Service: svc, Container: container, Evidence: []Evidence{{ID: "evidence:" + sanitizeID(sid) + ":docker", ResourceID: sid, Source: "docker inspect", Detail: c.Image}}},
+			Resource{Type: "deployment", ID: deploymentID, Deployment: &Deployment{ID: deploymentID, Name: deploymentName, Method: deploymentMethod, Command: svc.ExecStart, AutoStart: svc.AutoStart, RestartPolicy: svc.RestartPolicy, RestartCommand: "docker restart " + c.Name, ComposeProject: svc.ComposeProject}},
+		)
 		rels = append(rels, Relationship{
 			Source: sid, Target: hostID, Type: "runs_on", Confidence: 1.0,
 			Evidence: []string{"docker ps"},
 		})
+		rels = append(rels,
+			Relationship{Source: sid, Target: deploymentID, Type: "deployed_as", Confidence: 1, Evidence: []string{"docker inspect"}},
+			Relationship{Source: deploymentID, Target: hostID, Type: "runs_on", Confidence: 1, Evidence: []string{"docker inspect"}},
+		)
 		for _, name := range c.Networks {
 			nid := DockerNetworkID(hostname, name)
-			resources = append(resources, Resource{Type: "docker.network", ID: nid, Metadata: map[string]any{"name": name}})
+			resources = append(resources, Resource{Type: "docker.network", ID: nid, Network: &Network{ID: nid, Name: name}, Metadata: map[string]any{"name": name}})
 			rels = append(rels, Relationship{Source: sid, Target: nid, Type: "connected_to", Confidence: 1, Evidence: []string{"docker inspect"}})
 		}
 		for _, mount := range c.Mounts {
 			vid := DockerVolumeID(hostname, mount.Source)
-			resources = append(resources, Resource{Type: "docker.volume", ID: vid, Metadata: map[string]any{"type": mount.Type, "source": mount.Source, "destination": mount.Destination, "mode": mount.Mode}})
+			resources = append(resources, Resource{Type: "docker.volume", ID: vid, Volume: &Volume{ID: vid, Name: pathBase(mount.Source), Kind: mount.Type, Source: mount.Source, Destination: mount.Destination, Mode: mount.Mode}, Metadata: map[string]any{"type": mount.Type, "source": mount.Source, "destination": mount.Destination, "mode": mount.Mode}})
 			rels = append(rels, Relationship{Source: sid, Target: vid, Type: "mounts", Confidence: 1, Evidence: []string{"docker inspect"}})
 		}
 	}
@@ -220,6 +248,9 @@ func Discover(opts ScanOptions) (*ScanResult, error) {
 				"location": clean.Location, "upstream": clean.Upstream,
 			}})
 			rels = append(rels, Relationship{Source: routeID, Target: hostID, Type: "configured_on", Confidence: 1, Evidence: []string{clean.SourceFile}})
+			if target := matchUpstreamEndpoint(clean.Upstream, resources); target != "" {
+				rels = append(rels, Relationship{Source: routeID, Target: target, Type: "proxies_to", Confidence: .95, Evidence: []string{clean.SourceFile + ": proxy_pass " + clean.Upstream}})
+			}
 		}
 		warnings = append(warnings, nginxWarnings...)
 	}
@@ -236,6 +267,84 @@ func Discover(opts ScanOptions) (*ScanResult, error) {
 		return rels[i].Target < rels[j].Target
 	})
 
+	inv := Inventory{
+		CollectedAt:   at,
+		Hostname:      hostname,
+		Summary:       summarizeResources(resources),
+		Resources:     resources,
+		Relationships: rels,
+		Warnings:      warnings,
+		NginxRoutes:   nginxRoutes,
+	}
+	AnalyzeInventory(&inv)
+	inv.Resources = dedupeResources(inv.Resources)
+	sort.Slice(inv.Resources, func(i, j int) bool { return inv.Resources[i].ID < inv.Resources[j].ID })
+	sort.Slice(inv.Relationships, func(i, j int) bool {
+		return RelationshipID(inv.Relationships[i]) < RelationshipID(inv.Relationships[j])
+	})
+	inv.Summary = summarizeResources(inv.Resources)
+	inv.Summary.Applications = len(inv.Applications)
+	inv.Evidence, inv.Observations = buildEvidence(inv.Resources, at)
+	snap := Snapshot{
+		Timestamp:     at,
+		Hostname:      hostname,
+		Resources:     cloneResourcesForSnapshot(inv.Resources),
+		Relationships: append([]Relationship(nil), inv.Relationships...),
+		NoiseFields:   DefaultNoiseFields(),
+		Warnings:      warnings,
+		State:         "observed",
+	}
+
+	return &ScanResult{Inventory: inv, Snapshot: snap}, nil
+}
+
+func dockerAutoStart(policy string) string {
+	if policy == "" || policy == "no" {
+		return "disabled"
+	}
+	return "enabled"
+}
+
+func nonEmptyStrings(values ...string) []string {
+	out := []string{}
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			out = append(out, value)
+		}
+	}
+	return out
+}
+
+func matchUpstreamEndpoint(upstream string, resources []Resource) string {
+	value := strings.TrimSpace(upstream)
+	parsed, err := url.Parse(value)
+	if err != nil || parsed.Hostname() == "" || parsed.Port() == "" {
+		return ""
+	}
+	port, err := strconv.Atoi(parsed.Port())
+	if err != nil {
+		return ""
+	}
+	host := strings.ToLower(strings.Trim(parsed.Hostname(), "[]"))
+	for _, resource := range resources {
+		if resource.Endpoint != nil && resource.Endpoint.Port == port && upstreamMatchesListener(host, resource.Endpoint.Address) {
+			return resource.ID
+		}
+	}
+	return ""
+}
+
+func upstreamMatchesListener(host, listener string) bool {
+	listener = strings.ToLower(strings.Trim(strings.TrimSpace(listener), "[]"))
+	if host == listener {
+		return true
+	}
+	localHost := host == "localhost" || host == "127.0.0.1" || host == "::1"
+	wildcard := listener == "0.0.0.0" || listener == "::" || listener == "*"
+	return localHost && (wildcard || listener == "localhost" || listener == "127.0.0.1" || listener == "::1")
+}
+
+func summarizeResources(resources []Resource) Summary {
 	sum := Summary{}
 	for _, r := range resources {
 		switch r.Type {
@@ -253,29 +362,25 @@ func Discover(opts ScanOptions) (*ScanResult, error) {
 			sum.Volumes++
 		case "nginx.route":
 			sum.Routes++
+		case "deployment":
+			sum.Deployments++
+		case "database":
+			sum.Databases++
 		}
 	}
+	return sum
+}
 
-	inv := Inventory{
-		CollectedAt:   at,
-		Hostname:      hostname,
-		Summary:       sum,
-		Resources:     resources,
-		Relationships: rels,
-		Warnings:      warnings,
-		NginxRoutes:   nginxRoutes,
+func buildEvidence(resources []Resource, observedAt string) ([]Evidence, []Observation) {
+	evidence := []Evidence{}
+	observations := []Observation{}
+	for _, resource := range resources {
+		for _, item := range resource.Evidence {
+			evidence = append(evidence, item)
+			observations = append(observations, Observation{ID: "observation:" + sanitizeID(resource.ID), ResourceID: resource.ID, ObservedAt: observedAt, Facts: map[string]any{"type": resource.Type}, EvidenceID: item.ID})
+		}
 	}
-	AnalyzeInventory(&inv)
-	snap := Snapshot{
-		Timestamp:     at,
-		Hostname:      hostname,
-		Resources:     cloneResourcesForSnapshot(resources),
-		Relationships: rels,
-		NoiseFields:   DefaultNoiseFields(),
-		Warnings:      warnings,
-	}
-
-	return &ScanResult{Inventory: inv, Snapshot: snap}, nil
+	return evidence, observations
 }
 
 func gather(fixture string) (*host.Info, []process.Info, []net.Listener, []systemd.Unit, []docker.Container, []string, error) {
@@ -310,12 +415,12 @@ func gather(fixture string) (*host.Info, []process.Info, []net.Listener, []syste
 	if err != nil {
 		return nil, nil, nil, nil, nil, nil, err
 	}
-	units, err := systemd.Collect()
-	if err != nil {
-		return nil, nil, nil, nil, nil, nil, err
-	}
+	units, systemdErr := systemd.Collect()
 	containers, dockerErr := docker.Collect()
 	var warnings []string
+	if systemdErr != nil {
+		warnings = append(warnings, "systemd: "+systemdErr.Error())
+	}
 	if dockerErr != nil {
 		warnings = append(warnings, dockerErr.Error())
 	}

@@ -119,6 +119,9 @@ type Service struct {
 	ComposeProject   string           `json:"compose_project,omitempty"`
 	Health           string           `json:"health,omitempty"`
 	RestartCount     int              `json:"restart_count,omitempty"`
+	RestartPolicy    string           `json:"restart_policy,omitempty"`
+	AutoStart        string           `json:"auto_start,omitempty"`
+	UnitFile         string           `json:"unit_file,omitempty"`
 	Networks         []string         `json:"networks,omitempty"`
 	Mounts           []ContainerMount `json:"mounts,omitempty"`
 }
@@ -128,6 +131,90 @@ type ContainerMount struct {
 	Source      string `json:"source"`
 	Destination string `json:"destination"`
 	Mode        string `json:"mode,omitempty"`
+}
+
+// Deployment records how and where a workload is installed and started.
+type Deployment struct {
+	ID               string   `json:"id"`
+	Name             string   `json:"name"`
+	Method           string   `json:"method"` // systemd | docker | compose | process
+	Location         string   `json:"location,omitempty"`
+	Command          string   `json:"command,omitempty"`
+	WorkingDirectory string   `json:"working_directory,omitempty"`
+	User             string   `json:"user,omitempty"`
+	AutoStart        string   `json:"auto_start,omitempty"`
+	RestartPolicy    string   `json:"restart_policy,omitempty"`
+	RestartCommand   string   `json:"restart_command,omitempty"`
+	ConfigFiles      []string `json:"config_files,omitempty"`
+	ComposeProject   string   `json:"compose_project,omitempty"`
+}
+
+// Container is the typed Docker workload payload. Service remains populated
+// for backward compatibility with v0.x consumers.
+type Container struct {
+	ID             string           `json:"id"`
+	Name           string           `json:"name"`
+	RuntimeID      string           `json:"runtime_id,omitempty"`
+	Image          string           `json:"image"`
+	Command        string           `json:"command,omitempty"`
+	State          string           `json:"state,omitempty"`
+	Health         string           `json:"health,omitempty"`
+	RestartPolicy  string           `json:"restart_policy,omitempty"`
+	ComposeProject string           `json:"compose_project,omitempty"`
+	Networks       []string         `json:"networks,omitempty"`
+	Mounts         []ContainerMount `json:"mounts,omitempty"`
+}
+
+type Database struct {
+	ID          string   `json:"id"`
+	Engine      string   `json:"engine"`
+	Name        string   `json:"name"`
+	ResourceID  string   `json:"resource_id"`
+	EndpointIDs []string `json:"endpoint_ids,omitempty"`
+	Local       bool     `json:"local"`
+}
+
+type Network struct {
+	ID     string `json:"id"`
+	Name   string `json:"name"`
+	Driver string `json:"driver,omitempty"`
+}
+
+type Volume struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Kind        string `json:"kind"`
+	Source      string `json:"source"`
+	Destination string `json:"destination,omitempty"`
+	Mode        string `json:"mode,omitempty"`
+}
+
+// Evidence identifies the source behind a discovered fact.
+type Evidence struct {
+	ID         string `json:"id"`
+	ResourceID string `json:"resource_id,omitempty"`
+	Source     string `json:"source"`
+	Detail     string `json:"detail,omitempty"`
+}
+
+// Observation is a timestamped fact emitted by a collector.
+type Observation struct {
+	ID         string         `json:"id"`
+	ResourceID string         `json:"resource_id"`
+	ObservedAt string         `json:"observed_at"`
+	Facts      map[string]any `json:"facts,omitempty"`
+	EvidenceID string         `json:"evidence_id,omitempty"`
+}
+
+// ChangeEvent gives history and external integrations a stable event shape.
+type ChangeEvent struct {
+	ID         string   `json:"id"`
+	Kind       string   `json:"kind"`
+	ResourceID string   `json:"resource_id"`
+	Type       string   `json:"type"`
+	Severity   Severity `json:"severity"`
+	Summary    string   `json:"summary"`
+	OccurredAt string   `json:"occurred_at"`
 }
 
 // Relationship links two resources.
@@ -141,13 +228,19 @@ type Relationship struct {
 
 // Resource is the unified snapshot/inventory entry.
 type Resource struct {
-	Type     string         `json:"type"` // host | process | endpoint | service
-	ID       string         `json:"id"`
-	Host     *Host          `json:"host,omitempty"`
-	Process  *Process       `json:"process,omitempty"`
-	Endpoint *Endpoint      `json:"endpoint,omitempty"`
-	Service  *Service       `json:"service,omitempty"`
-	Metadata map[string]any `json:"metadata,omitempty"`
+	Type       string         `json:"type"` // host | process | endpoint | service | deployment | database | docker.* | nginx.route
+	ID         string         `json:"id"`
+	Host       *Host          `json:"host,omitempty"`
+	Process    *Process       `json:"process,omitempty"`
+	Endpoint   *Endpoint      `json:"endpoint,omitempty"`
+	Service    *Service       `json:"service,omitempty"`
+	Deployment *Deployment    `json:"deployment,omitempty"`
+	Container  *Container     `json:"container,omitempty"`
+	Database   *Database      `json:"database,omitempty"`
+	Network    *Network       `json:"network,omitempty"`
+	Volume     *Volume        `json:"volume,omitempty"`
+	Evidence   []Evidence     `json:"evidence,omitempty"`
+	Metadata   map[string]any `json:"metadata,omitempty"`
 }
 
 // Inventory is the human-oriented resource list from `infrascout scan`.
@@ -161,6 +254,9 @@ type Inventory struct {
 	DetectedServices []DetectedService `json:"detected_services,omitempty"`
 	Monitoring       MonitoringPlan    `json:"monitoring_plan"`
 	NginxRoutes      []NginxRoute      `json:"nginx_routes,omitempty"`
+	Applications     []Application     `json:"applications,omitempty"`
+	Evidence         []Evidence        `json:"evidence,omitempty"`
+	Observations     []Observation     `json:"observations,omitempty"`
 }
 
 type NginxRoute struct {
@@ -181,6 +277,24 @@ type DetectedService struct {
 	Endpoints  []string `json:"endpoints,omitempty" yaml:"endpoints,omitempty"`
 }
 
+// Application groups the facts that answer what a workload is, how it is
+// deployed, what it exposes, and what it depends on.
+type Application struct {
+	ID              string   `json:"id"`
+	Name            string   `json:"name"`
+	Kind            string   `json:"kind"`
+	Source          string   `json:"source"`
+	Confidence      float64  `json:"confidence"`
+	Status          string   `json:"status,omitempty"`
+	ResourceIDs     []string `json:"resource_ids"`
+	DeploymentIDs   []string `json:"deployment_ids,omitempty"`
+	EndpointIDs     []string `json:"endpoint_ids,omitempty"`
+	DependencyIDs   []string `json:"dependency_ids,omitempty"`
+	RestartCommand  string   `json:"restart_command,omitempty"`
+	NeedsReview     bool     `json:"needs_review,omitempty"`
+	EvidenceSummary []string `json:"evidence_summary,omitempty"`
+}
+
 type MonitoringPlan struct {
 	Version         string                     `json:"version" yaml:"version"`
 	GeneratedAt     string                     `json:"generated_at" yaml:"generated_at"`
@@ -199,13 +313,16 @@ type MonitoringRecommendation struct {
 }
 
 type Summary struct {
-	Hosts     int `json:"hosts"`
-	Processes int `json:"processes"`
-	Endpoints int `json:"endpoints"`
-	Services  int `json:"services"`
-	Networks  int `json:"networks,omitempty"`
-	Volumes   int `json:"volumes,omitempty"`
-	Routes    int `json:"nginx_routes,omitempty"`
+	Hosts        int `json:"hosts"`
+	Processes    int `json:"processes"`
+	Endpoints    int `json:"endpoints"`
+	Services     int `json:"services"`
+	Networks     int `json:"networks,omitempty"`
+	Volumes      int `json:"volumes,omitempty"`
+	Routes       int `json:"nginx_routes,omitempty"`
+	Deployments  int `json:"deployments,omitempty"`
+	Databases    int `json:"databases,omitempty"`
+	Applications int `json:"applications,omitempty"`
 }
 
 // Snapshot is a comparable state photo from `infrascout snapshot`.
@@ -217,6 +334,7 @@ type Snapshot struct {
 	// NoiseFields are ignored during attribute comparison.
 	NoiseFields []string `json:"noise_fields"`
 	Warnings    []string `json:"warnings,omitempty"`
+	State       string   `json:"state,omitempty"` // observed | approved | desired
 }
 
 // DiffReport is the result of comparing two snapshots.
@@ -231,6 +349,7 @@ type DiffReport struct {
 	BlockingRisk         Severity                    `json:"blocking_risk"`
 	ClassificationCounts map[DriftClassification]int `json:"classification_counts,omitempty"`
 	Unchanged            int                         `json:"unchanged_count"`
+	Events               []ChangeEvent               `json:"events,omitempty"`
 }
 
 // DiffItem is an added or removed resource.
@@ -268,5 +387,5 @@ func FormatTime(t time.Time) string {
 
 // DefaultNoiseFields are volatile attributes not used for drift identity.
 func DefaultNoiseFields() []string {
-	return []string{"pid", "process_id", "parent_pid", "main_pid", "status", "container_id", "restart_count"}
+	return []string{"pid", "process_id", "parent_pid", "main_pid", "status", "health", "container_id", "restart_count"}
 }

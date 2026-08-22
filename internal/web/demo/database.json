@@ -1,6 +1,7 @@
 {
-  "version": "infrascout.database/v1",
+  "version": "infrascout.database/v2",
   "engine": "postgresql",
+  "database_name": "shop",
   "collected_at": "2026-08-12T09:36:56+08:00",
   "server_version": "PostgreSQL 16.4",
   "schemas": [
@@ -57,8 +58,18 @@
     {"schema": "public", "name": "close_order", "type": "FUNCTION", "detail": "void"}
   ],
   "privileges": [
-    {"schema": "app_reader", "name": "SELECT", "type": "public", "detail": "orders"},
-    {"schema": "app_writer", "name": "INSERT", "type": "public", "detail": "orders"}
+    {"schema": "app_reader", "name": "SELECT", "type": "public.orders", "detail": "NO"},
+    {"schema": "app_writer", "name": "INSERT", "type": "public.orders", "detail": "NO"}
+  ],
+  "constraints": [
+    {"schema":"public","table":"orders","name":"orders_pkey","type":"PRIMARY KEY","columns":["id"]},
+    {"schema":"public","table":"orders","name":"orders_customer_fk","type":"FOREIGN KEY","columns":["customer_id"],"reference_schema":"public","reference_table":"customers","reference_columns":["id"],"update_rule":"NO ACTION","delete_rule":"RESTRICT"},
+    {"schema":"public","table":"customers","name":"customers_pkey","type":"PRIMARY KEY","columns":["id"]},
+    {"schema":"public","table":"customers","name":"customers_email_key","type":"UNIQUE","columns":["email"]}
+  ],
+  "roles": [
+    {"schema":"","name":"app_reader","type":"ROLE","detail":"login=true,superuser=false,createdb=false"},
+    {"schema":"","name":"app_writer","type":"ROLE","detail":"login=true,superuser=false,createdb=false"}
   ],
   "warnings": []
 }

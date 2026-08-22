@@ -2,9 +2,11 @@ package dbmeta
 
 import (
 	"encoding/json"
-	"fmt"
 	"sort"
+	"strings"
 	"time"
+
+	"github.com/GeneJie199/infrastructure-discovery/pkg/infrascout"
 )
 
 type Diff struct {
@@ -16,6 +18,69 @@ type Diff struct {
 	Removed     []DiffItem   `json:"removed"`
 	Changed     []DiffChange `json:"changed"`
 	Unchanged   int          `json:"unchanged_count"`
+}
+
+// MergeIntoInfraReport folds database metadata drift into the same review and
+// release-gate document as host/resource drift.
+func MergeIntoInfraReport(report *infrascout.DiffReport, database Diff) {
+	if report == nil {
+		return
+	}
+	keepAdded := report.Added[:0]
+	for _, item := range report.Added {
+		if !strings.HasPrefix(item.Type, "database.") {
+			keepAdded = append(keepAdded, item)
+		}
+	}
+	report.Added = keepAdded
+	keepRemoved := report.Removed[:0]
+	for _, item := range report.Removed {
+		if !strings.HasPrefix(item.Type, "database.") {
+			keepRemoved = append(keepRemoved, item)
+		}
+	}
+	report.Removed = keepRemoved
+	keepChanged := report.Changed[:0]
+	for _, item := range report.Changed {
+		if !strings.HasPrefix(item.Type, "database.") {
+			keepChanged = append(keepChanged, item)
+		}
+	}
+	report.Changed = keepChanged
+	for _, item := range database.Added {
+		report.Added = append(report.Added, infrascout.DiffItem{ID: "dbmeta:" + item.ID, Type: "database." + item.Kind, Summary: "database " + item.Kind + " added: " + item.ID, Severity: infraSeverity(item.Severity), After: valueMap(item.Value)})
+	}
+	for _, item := range database.Removed {
+		report.Removed = append(report.Removed, infrascout.DiffItem{ID: "dbmeta:" + item.ID, Type: "database." + item.Kind, Summary: "database " + item.Kind + " removed: " + item.ID, Severity: infraSeverity(item.Severity), Before: valueMap(item.Value)})
+	}
+	for _, item := range database.Changed {
+		report.Changed = append(report.Changed, infrascout.ChangeItem{ID: "dbmeta:" + item.ID, Type: "database." + item.Kind, Summary: "database " + item.Kind + " changed: " + item.ID, Severity: infraSeverity(item.Severity), Before: valueMap(item.Before), After: valueMap(item.After)})
+	}
+	infrascout.RecalculateReport(report)
+}
+
+func infraSeverity(value string) infrascout.Severity {
+	switch value {
+	case "CRITICAL":
+		return infrascout.SeverityCritical
+	case "WARNING":
+		return infrascout.SeverityWarning
+	default:
+		return infrascout.SeverityInfo
+	}
+}
+
+func valueMap(value any) map[string]any {
+	if value == nil {
+		return nil
+	}
+	if typed, ok := value.(map[string]any); ok {
+		return typed
+	}
+	data, _ := json.Marshal(value)
+	result := map[string]any{}
+	_ = json.Unmarshal(data, &result)
+	return result
 }
 
 type DiffItem struct {
@@ -39,7 +104,7 @@ type flatObject struct {
 }
 
 func Compare(before, after Metadata) Diff {
-	result := Diff{Version: "infrascout.database-diff/v1", ComparedAt: time.Now().UTC().Format(time.RFC3339), Engine: after.Engine, HighestRisk: "INFO", Added: []DiffItem{}, Removed: []DiffItem{}, Changed: []DiffChange{}}
+	result := Diff{Version: "infrascout.database-diff/v2", ComparedAt: time.Now().UTC().Format(time.RFC3339), Engine: after.Engine, HighestRisk: "INFO", Added: []DiffItem{}, Removed: []DiffItem{}, Changed: []DiffChange{}}
 	oldItems, newItems := flatten(before), flatten(after)
 	for id, oldItem := range oldItems {
 		newItem, ok := newItems[id]
@@ -77,10 +142,10 @@ func flatten(metadata Metadata) map[string]flatObject {
 	out := map[string]flatObject{}
 	for _, schema := range metadata.Schemas {
 		for _, table := range schema.Tables {
-			tableID := fmt.Sprintf("table:%s.%s", schema.Name, table.Name)
-			out[tableID] = flatObject{kind: "table", id: tableID, value: map[string]string{"schema": schema.Name, "name": table.Name}}
+			tableKey := tableID(schema.Name, table.Name)
+			out[tableKey] = flatObject{kind: "table", id: tableKey, value: map[string]string{"schema": schema.Name, "name": table.Name}}
 			for _, column := range table.Columns {
-				id := fmt.Sprintf("column:%s.%s.%s", schema.Name, table.Name, column.Name)
+				id := columnID(schema.Name, table.Name, column.Name)
 				out[id] = flatObject{kind: "column", id: id, value: column}
 			}
 		}
@@ -88,24 +153,28 @@ func flatten(metadata Metadata) map[string]flatObject {
 	groups := []struct {
 		kind   string
 		values []Object
-	}{{"index", metadata.Indexes}, {"view", metadata.Views}, {"trigger", metadata.Triggers}, {"routine", metadata.Routines}, {"privilege", metadata.Privileges}}
+	}{{"index", metadata.Indexes}, {"view", metadata.Views}, {"trigger", metadata.Triggers}, {"routine", metadata.Routines}, {"privilege", metadata.Privileges}, {"role", metadata.Roles}}
 	for _, group := range groups {
 		for _, value := range group.values {
-			id := fmt.Sprintf("%s:%s.%s.%s", group.kind, value.Schema, value.Name, value.Type)
+			id := objectID(group.kind, value)
 			out[id] = flatObject{kind: group.kind, id: id, value: value}
 		}
+	}
+	for _, value := range metadata.Constraints {
+		id := constraintID(value)
+		out[id] = flatObject{kind: "constraint", id: id, value: value}
 	}
 	return out
 }
 
 func databaseSeverity(kind, action string) string {
-	if kind == "privilege" {
+	if kind == "privilege" || kind == "role" {
 		return "CRITICAL"
 	}
 	if action == "removed" && (kind == "table" || kind == "column") {
 		return "CRITICAL"
 	}
-	if kind == "table" || kind == "column" || kind == "index" || kind == "trigger" {
+	if kind == "table" || kind == "column" || kind == "index" || kind == "trigger" || kind == "constraint" {
 		return "WARNING"
 	}
 	return "INFO"

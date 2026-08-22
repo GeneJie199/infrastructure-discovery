@@ -78,12 +78,16 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v7
       - uses: actions/download-artifact@v8
         with:
           path: dist
           merge-multiple: true
       - name: Checksums
-        run: cd dist && sha256sum infrascout-* > checksums.txt
+        run: |
+          cp scripts/install.sh dist/install.sh
+          cp deploy/infrascout.service dist/infrascout.service
+          cd dist && sha256sum infrascout-* install.sh infrascout.service > checksums.txt
       - uses: softprops/action-gh-release@v3
         with:
           files: dist/*

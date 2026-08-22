@@ -39,6 +39,9 @@ func Collect() ([]Unit, error) {
 		if show.UnitFileState != "" {
 			units[i].UnitFileState = show.UnitFileState
 		}
+		if show.Restart != "" {
+			units[i].Restart = show.Restart
+		}
 		if show.MainPID > 0 {
 			units[i].MainPID = show.MainPID
 		}
@@ -91,7 +94,7 @@ func parseListUnits(out []byte) ([]Unit, error) {
 func showUnit(name string) (*Unit, error) {
 	cmd := exec.Command(
 		"systemctl", "show", name,
-		"--property=Description,FragmentPath,UnitFileState,MainPID,SubState,ActiveState,LoadState,ExecStart,WorkingDirectory,User",
+		"--property=Description,FragmentPath,UnitFileState,Restart,MainPID,SubState,ActiveState,LoadState,ExecStart,WorkingDirectory,User",
 		"--no-pager",
 	)
 	out, err := cmd.Output()
@@ -111,6 +114,8 @@ func showUnit(name string) (*Unit, error) {
 			u.FragmentPath = v
 		case "UnitFileState":
 			u.UnitFileState = v
+		case "Restart":
+			u.Restart = v
 		case "MainPID":
 			if n, err := strconv.Atoi(v); err == nil {
 				u.MainPID = n

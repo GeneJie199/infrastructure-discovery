@@ -194,6 +194,10 @@ func FindDriftItem(report DiffReport, fingerprint, resourceID string) (string, s
 // PromoteResource applies one reviewed resource change to a baseline without
 // accepting unrelated resources from the current snapshot.
 func PromoteResource(baseline *Snapshot, current Snapshot, resourceID, kind string) {
+	if strings.HasPrefix(resourceID, "relationship:") {
+		promoteRelationship(baseline, current, resourceID, kind)
+		return
+	}
 	resources := make([]Resource, 0, len(baseline.Resources)+1)
 	for _, resource := range baseline.Resources {
 		if resource.ID != resourceID {
@@ -219,6 +223,24 @@ func PromoteResource(baseline *Snapshot, current Snapshot, resourceID, kind stri
 		for _, relationship := range current.Relationships {
 			if relationship.Source == resourceID || relationship.Target == resourceID {
 				relationships = append(relationships, relationship)
+			}
+		}
+	}
+	baseline.Relationships = relationships
+}
+
+func promoteRelationship(baseline *Snapshot, current Snapshot, relationshipID, kind string) {
+	relationships := make([]Relationship, 0, len(baseline.Relationships)+1)
+	for _, relationship := range baseline.Relationships {
+		if RelationshipID(relationship) != relationshipID {
+			relationships = append(relationships, relationship)
+		}
+	}
+	if kind != "removed" {
+		for _, relationship := range current.Relationships {
+			if RelationshipID(relationship) == relationshipID {
+				relationships = append(relationships, relationship)
+				break
 			}
 		}
 	}

@@ -48,6 +48,12 @@ func TestDiscoverHostSample(t *testing.T) {
 	if len(res.Inventory.Monitoring.Recommendations) < 2 {
 		t.Fatalf("monitoring plan=%+v", res.Inventory.Monitoring)
 	}
+	if len(res.Inventory.Applications) == 0 || res.Inventory.Summary.Deployments == 0 {
+		t.Fatalf("semantic inventory missing applications/deployments: %+v", res.Inventory.Summary)
+	}
+	if res.Snapshot.State != "observed" {
+		t.Fatalf("snapshot state=%q, want observed", res.Snapshot.State)
+	}
 	for _, recommendation := range res.Inventory.Monitoring.Recommendations {
 		if !strings.HasPrefix(recommendation.Collector, "fleetscope/") {
 			t.Fatalf("monitoring plan must use native FleetScope collectors, got %q", recommendation.Collector)
@@ -89,6 +95,19 @@ func TestDiscoverHostSample(t *testing.T) {
 	if len(res.Snapshot.Relationships) == 0 {
 		t.Fatal("expected relationships")
 	}
+}
+
+func TestDiscoverLinksNginxRouteWhenUpstreamEndpointExists(t *testing.T) {
+	res, err := infrascout.Discover(infrascout.ScanOptions{FixtureRoot: fixture(t, "host-sample-v2"), NginxRoot: filepath.Join(fixture(t, "host-sample"), "nginx")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, relationship := range res.Inventory.Relationships {
+		if relationship.Type == "proxies_to" && len(relationship.Evidence) > 0 {
+			return
+		}
+	}
+	t.Fatal("nginx route should link to its discovered upstream endpoint")
 }
 
 func TestDiffFixtureMutation(t *testing.T) {

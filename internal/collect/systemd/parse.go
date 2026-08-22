@@ -18,6 +18,7 @@ type Unit struct {
 	Description      string `json:"description,omitempty"`
 	FragmentPath     string `json:"fragmentPath,omitempty"`
 	UnitFileState    string `json:"unitFileState,omitempty"`
+	Restart          string `json:"restart,omitempty"`
 	MainPID          int    `json:"mainPID,omitempty"`
 	ExecStart        string `json:"execStart,omitempty"`
 	WorkingDirectory string `json:"workingDirectory,omitempty"`
@@ -102,6 +103,8 @@ func parseUnitFile(path, name string) (*Unit, error) {
 			u.SubState = v
 		case "UnitFileState":
 			u.UnitFileState = v
+		case "Restart":
+			u.Restart = v
 		case "ExecStart":
 			u.ExecStart = v
 		case "WorkingDirectory":

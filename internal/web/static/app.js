@@ -9,10 +9,11 @@
   var lastSuccess = 0;
   var lastETag = "";
   var loading = false;
-  var dirtyTabs = { overview: true, resources: true, ports: true, monitoring: true, database: true, drift: true };
+  var dirtyTabs = { overview: true, applications: true, resources: true, ports: true, monitoring: true, database: true, drift: true };
   var monitoringConfigText = "";
   var driftFilter = "blocking";
   var toastTimer = 0;
+	var overviewRiskExpanded = false;
 
   function esc(s) {
     if (s === null || s === undefined) return "";
@@ -48,7 +49,14 @@
     if ((match = summary.match(/^removed nginx\.route (.+)$/))) return "删除 Nginx 路由 " + match[1];
     if ((match = summary.match(/^(.+): exec_start changed$/))) return match[1] + "：启动命令已变化";
     if ((match = summary.match(/^(.+): executable changed$/))) return match[1] + "：可执行文件已变化";
+	if ((match = summary.match(/^database (\S+) (added|removed|changed): (.+)$/))) return "数据库" + databaseKindText(match[1]) + ({ added: "新增：", removed: "删除：", changed: "变化：" })[match[2]] + match[3];
+	if ((match = summary.match(/^relationship (added|removed|changed): (\S+) (\S+) (\S+)$/))) return "关系" + ({ added: "新增：", removed: "删除：", changed: "变化：" })[match[1]] + match[2] + " " + relationLabel(match[3]) + " " + match[4];
+    if ((match = summary.match(/^(added|removed) (\S+) (.+)$/))) return ({ added: "新增", removed: "删除" })[match[1]] + (TYPE_TEXT[match[2]] || match[2]) + " " + match[3];
     return summary;
+  }
+
+  function databaseKindText(kind) {
+	return ({ table: "表", column: "字段", constraint: "约束", index: "索引", view: "视图", trigger: "触发器", routine: "函数/过程", role: "角色", privilege: "权限" })[kind] || kind;
   }
 
   var SEV_CLASS = { CRITICAL: "crit", WARNING: "warn", INFO: "info" };
@@ -58,9 +66,10 @@
     return '<span class="badge ' + c + '">' + esc(SEV_TEXT[sev] || sev) + "</span>";
   }
 
-  var TYPE_TEXT = { host: "主机", process: "进程", endpoint: "端口", service: "服务" };
+  var TYPE_TEXT = { host: "主机", process: "进程", endpoint: "端口", service: "服务", deployment: "部署", database: "数据库", "docker.network": "容器网络", "docker.volume": "数据卷", "nginx.route": "代理路由", relationship: "关系" };
   function typeBadge(t) {
-    return '<span class="badge muted">' + esc(TYPE_TEXT[t] || t) + "</span>";
+	var label = TYPE_TEXT[t] || (String(t).indexOf("database.") === 0 ? "数据库" + databaseKindText(String(t).slice(9)) : t);
+	return '<span class="badge muted">' + esc(label) + "</span>";
   }
 
   var EXPOSE_TEXT = { public: "公网暴露", localhost: "仅本机", private: "内网", unknown: "未知" };
@@ -76,18 +85,22 @@
     var resources = (inv && inv.resources) || (snap && snap.resources) || [];
     var hostname = (inv && inv.hostname) || (snap && snap.hostname) || "-";
     var capturedAt = (inv && inv.collected_at) || (snap && snap.timestamp) || "";
-    var byType = { host: [], process: [], endpoint: [], service: [] };
+    var byType = { host: [], process: [], endpoint: [], service: [], deployment: [], database: [], "docker.network": [], "docker.volume": [], "nginx.route": [] };
     resources.forEach(function (r) {
       if (byType[r.type]) byType[r.type].push(r);
     });
     return {
-      inventory: inv, snapshot: snap, drift: data.drift || null, database: data.database || null,
+      inventory: inv, snapshot: snap, drift: data.drift || null, database: data.database || null, databaseDiff: data.database_diff || null,
       resources: resources, byType: byType,
       hostname: hostname, capturedAt: capturedAt,
       summary: inv && inv.summary ? inv.summary : null,
       generatedAt: data.generated_at, sources: data.sources || {}, reviewEnabled: Boolean(data.review_enabled),
       sourceMode: inv ? "inventory" : "snapshot"
     };
+  }
+
+  function refreshIcons() {
+    if (window.lucide) window.lucide.createIcons({ attrs: { "stroke-width": 1.8, "aria-hidden": "true" } });
   }
 
   function riskItems(ctx) {
@@ -112,8 +125,46 @@
     return '<div class="flow-list">' + endpoints.map(function (resource) {
       var endpoint = resource.endpoint;
       var service = services.find(function (item) { return item.service && Number(item.service.main_pid) === Number(endpoint.process_id); });
-      return '<button class="flow-row" type="button" data-open-resource="' + esc(resource.id) + '"><span class="flow-node external">外部网络</span><i>→</i><span class="flow-node"><b>' + esc(endpoint.address + ':' + endpoint.port) + '</b><small>' + esc(endpoint.protocol) + '</small></span><i>→</i><span class="flow-node"><b>' + esc(endpoint.process_name || '未知进程') + '</b><small>PID ' + esc(endpoint.process_id || '-') + ' · ' + esc(endpoint.process_user || '-') + '</small></span><i>→</i><span class="flow-node"><b>' + esc(service && service.service ? service.service.name : '未关联服务') + '</b><small>' + (service ? esc(service.service.active_state + ' / ' + service.service.sub_state) : '需要补充关系证据') + '</small></span></button>';
+      return '<button class="flow-row" type="button" data-open-resource="' + esc(resource.id) + '"><span class="flow-node external">外部网络</span><i>→</i><span class="flow-node"><b>' + esc(endpoint.address + ':' + endpoint.port) + '</b><small>' + esc(endpoint.protocol) + '</small></span><i>→</i><span class="flow-node"><b>' + esc(endpoint.process_name || '未知进程') + '</b><small>PID ' + esc(endpoint.process_id || '-') + ' · ' + esc(endpoint.process_user || '-') + '</small></span><i>→</i><span class="flow-node"><b>' + esc(service && service.service ? service.service.name : '未关联服务') + '</b><small>' + (service && service.service ? esc(service.service.active_state + ' / ' + service.service.sub_state) : '需要补充关系证据') + '</small></span></button>';
     }).join('') + '</div>';
+  }
+
+  function applicationList(ctx) {
+    var applications = (ctx.inventory && ctx.inventory.applications) || [];
+    if (applications.length) return applications;
+    return (((ctx.inventory || {}).detected_services) || []).map(function (item) {
+      var endpointIDs = ctx.byType.endpoint.filter(function (resource) { return (item.endpoints || []).some(function (endpoint) { var match = String(endpoint).match(/:(\d+)$/); return match && Number(match[1]) === Number(resource.endpoint.port); }); }).map(function (resource) { return resource.id; });
+	  return { id: "application:" + item.resource_id, name: item.name, kind: item.kind, source: item.source, confidence: item.confidence, resource_ids: [item.resource_id], endpoint_ids: endpointIDs, deployment_ids: [], needs_review: Number(item.confidence) < .9 };
+    });
+  }
+
+  function resourceByID(ctx, id) {
+    return ctx.resources.find(function (item) { return item.id === id; }) || null;
+  }
+
+  function applicationCard(ctx, app) {
+    var endpoints = (app.endpoint_ids || []).map(function (id) { return resourceByID(ctx, id); }).filter(Boolean);
+    var deployments = (app.deployment_ids || []).map(function (id) { return resourceByID(ctx, id); }).filter(Boolean);
+    var publicCount = endpoints.filter(function (item) { return item.endpoint && item.endpoint.exposed_level === "public"; }).length;
+    var primaryResource = (app.resource_ids || [])[0] || "";
+    var deployment = deployments[0] && deployments[0].deployment;
+    var portText = endpoints.map(function (item) { return item.endpoint ? item.endpoint.address + ":" + item.endpoint.port : item.id; }).join(", ") || "未发现监听";
+    var icon = ({ nginx: "server-cog", postgresql: "database", mysql: "database", redis: "database-zap", java: "coffee", nodejs: "hexagon", python: "code-2", "php-fpm": "file-code-2" })[app.kind] || "box";
+    return '<article class="application-card"><div class="application-top"><span class="application-icon"><i data-lucide="' + icon + '"></i></span><div><h3>' + esc(app.name || app.kind) + '</h3><p>' + esc(app.kind) + ' · ' + esc(app.source || 'unknown') + '</p></div><span class="confidence ' + (app.needs_review ? 'review' : '') + '">' + (app.needs_review ? '待确认' : '已识别') + '</span></div>' +
+      '<div class="application-facts"><span><i data-lucide="activity"></i><b>' + esc(app.status || '已发现') + '</b></span><span><i data-lucide="network"></i><b>' + esc(portText) + '</b></span><span><i data-lucide="package-open"></i><b>' + esc(deployment ? (deployment.method + ' · ' + deployment.name) : (app.source || '进程发现')) + '</b></span></div>' +
+      '<div class="application-foot"><span class="' + (publicCount ? 'warn-text' : 'ok-text') + '">' + (publicCount ? publicCount + ' 个公网入口' : '无公网入口') + '</span><button class="link-btn" type="button" data-open-resource="' + esc(primaryResource) + '">查看运行档案 <i data-lucide="arrow-up-right"></i></button></div></article>';
+  }
+
+  function renderApplications(ctx) {
+    var el = document.getElementById("tab-applications");
+    var applications = applicationList(ctx);
+    var html = '<div class="page-head compact"><div><span class="eyebrow">工作负载视角</span><h1>机器里运行着什么</h1><p>按应用聚合进程、部署、端口、依赖和可复核证据，低置信识别会明确标记为待确认。</p></div><div class="capture"><span>识别结果</span><strong>' + applications.length + ' 个应用</strong></div></div>';
+    if (!applications.length) {
+      html += '<div class="empty-state"><span class="empty-icon"><i data-lucide="scan-search"></i></span><h2>尚未识别到应用</h2><p>当前扫描仍保留全部原始资产。可从资产页核对进程，也可以刷新采集结果。</p><button type="button" class="chip" data-jump="resources">查看全部资产</button></div>';
+    } else {
+      html += '<div class="application-grid">' + applications.map(function (app) { return applicationCard(ctx, app); }).join('') + '</div>';
+    }
+    el.innerHTML = html;
   }
 
   /* ---------- 概览 ---------- */
@@ -136,7 +187,7 @@
     var risks = riskItems(ctx);
     var exposureRisks = risks.filter(function (item) { return item.type === "endpoint"; });
     var driftRisks = risks.filter(function (item) { return item.type !== "endpoint"; });
-    var visibleRisks = risks.slice(0, 6);
+	var visibleRisks = overviewRiskExpanded ? risks : risks.slice(0, 6);
     var hiddenRiskCount = Math.max(0, risks.length - visibleRisks.length);
     var html = '<div class="page-head"><div><span class="eyebrow">主机事实</span><h1>' + esc(ctx.hostname) + '</h1><p>从实际进程、监听、服务、路由和快照变化中定位需要处理的基础设施事实。</p></div><div class="capture"><span class="source-badge">' + (ctx.sourceMode === 'inventory' ? '实时清单' : '快照回放') + '</span><span>最近采集</span><strong>' + fmtTime(ctx.capturedAt) + '</strong></div></div>';
 	if (ctx.inventory && ctx.inventory.warnings && ctx.inventory.warnings.length) {
@@ -148,8 +199,15 @@
       '<button class="kpi" data-jump="resources"><span>运行资产</span><b>' + (counts.processes + counts.services) + '</b><small>' + counts.processes + ' 进程 · ' + counts.services + ' 服务</small></button>' +
       '<button class="kpi" data-jump="drift"><span>最近变更</span><b>' + (ctx.drift ? (ctx.drift.added || []).length + (ctx.drift.removed || []).length + (ctx.drift.changed || []).length : 0) + '</b><small>' + (ctx.drift ? (SEV_TEXT[ctx.drift.highest_risk] || ctx.drift.highest_risk) : '未加载对比') + '</small></button></div>';
 
+    html += '<div class="state-model" aria-label="事实状态模型"><div class="active"><i data-lucide="scan-eye"></i><span>Observed 观测态</span><b>当前扫描事实</b></div><i data-lucide="arrow-right"></i><div><i data-lucide="shield-check"></i><span>Approved 批准态</span><b>审核后的可信基线</b></div><i data-lucide="arrow-right"></i><div><i data-lucide="target"></i><span>Desired 期望态</span><b>交给发布门禁校验</b></div></div>';
+
+    var applications = applicationList(ctx);
+    html += '<section class="home-applications"><div class="panel-head"><div><span class="eyebrow">应用视角</span><h2>机器里运行着什么</h2></div><button class="link-btn" data-jump="applications">全部应用 <i data-lucide="arrow-right"></i></button></div>';
+    html += applications.length ? '<div class="application-grid compact-grid">' + applications.slice(0, 3).map(function (app) { return applicationCard(ctx, app); }).join('') + '</div>' : '<div class="notice">当前未识别到应用，原始资产仍可在资产页完整查看。</div>';
+    html += '</section>';
+
     html += '<div class="dashboard-grid"><section class="dashboard-panel" id="risk-queue"><div class="panel-head"><div><span class="eyebrow">待处理</span><h2>风险优先队列</h2></div><div class="panel-actions"><button class="link-btn" data-jump="ports">暴露 ' + exposureRisks.length + '</button><button class="link-btn" data-jump="drift">漂移 ' + driftRisks.length + '</button></div></div>';
-    html += risks.length ? '<div class="risk-list">' + visibleRisks.map(function (item) { return '<button type="button" class="risk-row ' + item.cls + '" data-open-resource="' + esc(item.id) + '"><span class="risk-mark"></span><span><b>' + esc(item.title) + '</b><small>' + esc(item.detail) + ' · ' + esc(item.id) + '</small></span><em>查看</em></button>'; }).join('') + (hiddenRiskCount ? '<div class="risk-more">还有 ' + hiddenRiskCount + ' 条风险未在首页展开，请从上方“暴露 / 漂移”入口查看完整清单。</div>' : '') + '</div>' : '<div class="notice ok-notice">当前快照未发现需要立即处置的暴露或漂移风险。</div>';
+    html += risks.length ? '<div class="risk-list">' + visibleRisks.map(function (item) { return '<button type="button" class="risk-row ' + item.cls + '" data-open-resource="' + esc(item.id) + '"><span class="risk-mark"></span><span><b>' + esc(item.title) + '</b><small>' + esc(item.detail) + ' · ' + esc(item.id) + '</small></span><em>查看</em></button>'; }).join('') + (hiddenRiskCount ? '<button type="button" class="risk-more" data-expand-risks>展开其余 ' + hiddenRiskCount + ' 条风险</button>' : '') + '</div>' : '<div class="notice ok-notice">当前快照未发现需要立即处置的暴露或漂移风险。</div>';
     html += '</section><section class="dashboard-panel"><div class="panel-head"><div><span class="eyebrow">系统轮廓</span><h2>主机轮廓</h2></div></div>';
     html += '<div class="host-profile">';
     if (host) {
@@ -207,12 +265,55 @@
       var s = r.service;
       return (s.active_state || "?") + " / " + (s.sub_state || "?") + " · " + (s.description || "");
     }
+	if (r.type === "deployment" && r.deployment) return r.deployment.method + " · " + r.deployment.name + " · " + (r.deployment.location || r.deployment.command || "");
+	if (r.type === "database" && r.database) return r.database.engine + " · " + r.database.name;
+	if (r.type === "docker.network" && r.network) return r.network.name;
+	if (r.type === "docker.volume" && r.volume) return r.volume.source + " → " + (r.volume.destination || "-");
+	if (r.type === "nginx.route" && r.metadata) return (r.metadata.server_name || "_") + (r.metadata.location || "/") + " → " + r.metadata.upstream;
     return "";
+  }
+
+  function resourcePayload(resource) {
+    return resource && (resource[resource.type] || resource.container || resource.deployment || resource.database || resource.network || resource.volume || resource.metadata) || {};
+  }
+
+  function relationLabel(type) {
+    return ({ runs_on: "运行于", listens_on: "监听", deployed_as: "部署方式", connected_to: "连接到", mounts: "挂载", configured_on: "配置于", proxies_to: "代理到", provides_database: "提供数据库" })[type] || type;
+  }
+
+  function openResourceDrawer(id) {
+    if (!currentCtx || !id) return;
+    var resource = resourceByID(currentCtx, id);
+    var removed = flattenDrift(currentCtx.drift).find(function (item) { return item.id === id; });
+    var dialog = document.getElementById("resource-dialog");
+    var body = document.getElementById("resource-body");
+    document.getElementById("resource-kind").textContent = resource ? (TYPE_TEXT[resource.type] || resource.type) + "档案" : "历史资产";
+    document.getElementById("resource-title").textContent = resource ? (resourceDesc(resource).split(" · ")[0] || resource.id) : "资产已从当前快照消失";
+    document.getElementById("resource-subtitle").textContent = id;
+    if (!resource) {
+      var changeNotice = removed && removed.type === 'relationship' ? '这是一条关系变化，关系本身也可以独立审核并提升到基线。' : removed && String(removed.type).indexOf('database.') === 0 ? '这是一条只读数据库元数据变化，可使用同一套审核和单条基线提升流程处置。' : '该资产只存在于批准基线，当前扫描已无法找到。';
+	  body.innerHTML = '<div class="notice warning-notice">' + changeNotice + '</div>' + (removed ? '<section class="drawer-section"><h3>变化前</h3>' + kvTable(removed.before) + '</section><section class="drawer-section"><h3>变化后</h3>' + kvTable(removed.after) + '</section>' : '');
+	  if (!dialog.open) dialog.showModal(); refreshIcons(); return;
+    }
+    var relationships = ((currentCtx.inventory && currentCtx.inventory.relationships) || (currentCtx.snapshot && currentCtx.snapshot.relationships) || []).filter(function (item) { return item.source === id || item.target === id; });
+    var changes = flattenDrift(currentCtx.drift).filter(function (item) { return item.id === id; });
+    var payload = resourcePayload(resource);
+    var html = '<div class="drawer-status"><span>' + typeBadge(resource.type) + '</span><span><i data-lucide="fingerprint"></i> 稳定 ID</span><span><i data-lucide="database-zap"></i> ' + esc((resource.evidence || []).length) + ' 条直接证据</span></div>';
+    html += '<section class="drawer-section"><div class="section-heading"><div><h3>运行事实</h3><p>采集器直接观测到的字段，敏感命令参数已脱敏。</p></div></div>' + kvTable(payload) + '</section>';
+    if (resource.service) {
+      var s = resource.service;
+      html += '<section class="drawer-section action-facts"><h3>如何运行</h3><div class="fact-grid"><div><span>部署来源</span><b>' + esc(s.source || '-') + '</b></div><div><span>开机自启</span><b>' + esc(s.auto_start || '未知') + '</b></div><div><span>重启策略</span><b>' + esc(s.restart_policy || '未知') + '</b></div><div><span>运行用户</span><b>' + esc(s.user || '-') + '</b></div></div><div class="command-fact"><span>重启命令</span><code>' + esc(s.source === 'docker' ? 'docker restart ' + s.name : 'systemctl restart ' + s.name) + '</code></div></section>';
+    }
+    html += '<section class="drawer-section"><h3>关系与依赖</h3>' + (relationships.length ? '<div class="relationship-list">' + relationships.map(function (item) { var outbound = item.source === id; var peer = outbound ? item.target : item.source; return '<button type="button" data-open-resource="' + esc(peer) + '"><span class="relation-direction">' + (outbound ? '出' : '入') + '</span><span><b>' + esc(relationLabel(item.type)) + '</b><small>' + esc(peer) + '</small></span><em>' + Math.round(Number(item.confidence || 0) * 100) + '%</em></button>'; }).join('') + '</div>' : '<div class="notice">尚未采集到与该资产相关的关系。</div>') + '</section>';
+    html += '<section class="drawer-section"><h3>最近变化</h3>' + (changes.length ? changes.map(function (item) { return '<div class="mini-change">' + sevBadge(item.severity) + '<span>' + esc(driftSummary(item.summary)) + '</span><b>' + esc(dispositionText(item.classification)) + '</b></div>'; }).join('') : '<div class="notice ok-notice">相对批准基线没有变化。</div>') + '</section>';
+    body.innerHTML = html;
+    if (!dialog.open) dialog.showModal();
+    refreshIcons();
   }
   function renderResources(ctx) {
     var el = document.getElementById("tab-resources");
-    var types = [["all", "全部"], ["host", "主机"], ["process", "进程"], ["endpoint", "端口"], ["service", "服务"]];
-    var html = '<div class="toolbar">';
+    var types = [["all", "全部"], ["host", "主机"], ["process", "进程"], ["endpoint", "端口"], ["service", "服务"], ["deployment", "部署"], ["database", "数据库"], ["docker.network", "网络"], ["docker.volume", "卷"]];
+    var html = '<div class="page-head compact"><div><span class="eyebrow">统一资源模型</span><h1>全部资产事实</h1><p>浏览 Host、Process、Service、Deployment、Container、Database、Endpoint、Volume 和 Network；打开任意条目可核对完整字段与关系证据。</p></div><div class="capture"><span>当前快照</span><strong>' + ctx.resources.length + ' 项资源</strong><span>' + (((ctx.inventory || {}).relationships) || []).length + ' 条关系</span></div></div><div class="toolbar">';
     types.forEach(function (t) {
       html += '<button class="chip' + (resFilter.type === t[0] ? " active" : "") + '" data-rtype="' + t[0] + '">' + t[1] + "</button>";
     });
@@ -235,7 +336,7 @@
     html += '<div class="tablewrap"><table><thead><tr><th>类型</th><th>资源 ID</th><th>关键信息</th></tr></thead><tbody>';
     if (!rows.length) html += '<tr><td colspan="3" class="muted-cell">无匹配资源</td></tr>';
     rows.forEach(function (r) {
-      html += '<tr class="selectable' + (selectedResourceId === r.id ? ' selected' : '') + '" tabindex="0" data-open-resource="' + esc(r.id) + '"><td>' + typeBadge(r.type) + "</td><td class='mono'>" + esc(r.id) + "</td><td>" + esc(resourceDesc(r)) + "</td></tr>";
+      html += '<tr class="selectable' + (selectedResourceId === r.id ? ' selected' : '') + '"><td>' + typeBadge(r.type) + "</td><td class='mono'><button class='row-open' type='button' data-open-resource='" + esc(r.id) + "'>" + esc(r.id) + "</button></td><td>" + esc(resourceDesc(r)) + "</td></tr>";
     });
     html += "</tbody></table></div>";
     el.innerHTML = html;
@@ -293,17 +394,20 @@
       return d !== 0 ? d : (a.endpoint.port - b.endpoint.port);
     });
     var html = "";
-    if (!eps.length) {
-      el.innerHTML = '<div class="notice">没有监听端口数据。</div>';
-      return;
-    }
-    html += '<div class="page-head compact"><div><span class="eyebrow">网络暴露</span><h1>网络暴露面</h1><p>按严重程度查看监听端口，并回到对应资产链路核对责任进程与服务。</p></div></div><div class="exposure-list">';
+    var routes = (ctx.inventory && ctx.inventory.nginx_routes) || [];
+    var proxyRelationships = ((ctx.inventory && ctx.inventory.relationships) || []).filter(function (item) { return item.type === "proxies_to"; });
+    html += '<div class="page-head compact"><div><span class="eyebrow">网络拓扑</span><h1>暴露与依赖</h1><p>从监听入口追到责任进程、反向代理上游与部署关系，所有连线均附带采集证据。</p></div><div class="capture"><span>关系证据</span><strong>' + (((ctx.inventory || {}).relationships) || []).length + ' 条</strong></div></div><div class="exposure-list">';
+    if (!eps.length) html += '<div class="notice">没有监听端口数据。</div>';
     eps.forEach(function (r) {
       var e = r.endpoint;
       var risk = portRisk(e);
       html += '<article class="exposure-item ' + risk.cls + '"><div class="port-number"><span>' + esc(e.protocol) + '</span><b>' + esc(e.port) + '</b></div><div class="exposure-main"><div><strong>' + esc(e.address) + ':' + esc(e.port) + '</strong>' + exposeBadge(e.exposed_level) + '</div><p>' + esc(risk.text) + '</p><dl><dt>进程</dt><dd>' + esc(e.process_name || '未知') + (e.process_id ? ' · PID ' + esc(e.process_id) : '') + '</dd><dt>用户</dt><dd>' + esc(e.process_user || '-') + '</dd></dl></div><button class="link-btn" type="button" data-open-resource="' + esc(r.id) + '">定位资产</button></article>';
     });
     html += "</div>";
+    html += '<section class="topology-section"><div class="section-heading"><div><h2>Nginx 代理链路</h2><p>配置文件中的 proxy_pass 已与实际监听端点进行匹配。</p></div><span class="badge ' + (routes.length && !proxyRelationships.length ? 'warn' : 'ok') + '">' + proxyRelationships.length + ' 条已连线</span></div>';
+    if (routes.length) html += '<div class="route-grid">' + routes.map(function (route) { var routeResource = ctx.byType["nginx.route"].find(function (item) { return item.metadata && item.metadata.source_file === route.source_file && item.metadata.location === route.location; }); var rel = routeResource && proxyRelationships.find(function (item) { return item.source === routeResource.id; }); return '<article class="route-card"><div class="route-source"><i data-lucide="globe-2"></i><span><b>' + esc((route.server_name || '_') + (route.location || '/')) + '</b><small>' + esc(route.listen || 'default listen') + '</small></span></div><i data-lucide="arrow-right"></i><div class="route-target"><i data-lucide="server"></i><span><b>' + esc(route.upstream) + '</b><small>' + (rel ? '已匹配 ' + esc(rel.target) : '未匹配到本机监听') + '</small></span></div><button type="button" class="icon-command" data-open-resource="' + esc(routeResource ? routeResource.id : '') + '" title="查看路由证据" aria-label="查看路由证据"><i data-lucide="file-search"></i></button></article>'; }).join('') + '</div>';
+    else html += '<div class="notice">未发现静态 Nginx proxy_pass 路由。</div>';
+    html += '</section>';
     el.innerHTML = html;
   }
 
@@ -394,6 +498,19 @@
   }
 
   /* ---------- 数据库结构 ---------- */
+  function databaseObjectTable(title, values, icon) {
+    if (!values || !values.length) return "";
+    return '<details class="db-object-group"><summary><span><i data-lucide="' + icon + '"></i><b>' + esc(title) + '</b></span><em>' + values.length + ' 项</em></summary><div class="tablewrap"><table><thead><tr><th>架构 / 主体</th><th>名称</th><th>类型</th><th>详情</th></tr></thead><tbody>' + values.map(function (item) { return '<tr><td class="mono">' + esc(item.schema || '-') + '</td><td class="mono">' + esc(item.name || '-') + '</td><td>' + esc(item.type || '-') + '</td><td class="mono wrap-code">' + esc(item.detail || '-') + '</td></tr>'; }).join('') + '</tbody></table></div></details>';
+  }
+
+  function databaseDriftPanel(diff) {
+    if (!diff) return '<div class="notice">尚未建立数据库结构对比。运行 <code class="inline">infrascout database --engine postgres --state-dir .infrascout</code> 后会自动保存基线并持续对比。</div>';
+    var items = [];
+    [["added", diff.added || []], ["removed", diff.removed || []], ["changed", diff.changed || []]].forEach(function (group) { group[1].forEach(function (item) { items.push(Object.assign({ action: group[0] }, item)); }); });
+    if (!items.length) return '<div class="notice ok-notice"><strong>数据库结构与批准基线一致</strong><br>已核对表、字段、约束、索引、视图、触发器、例程、角色和权限。</div>';
+    return '<div class="database-drift"><div class="section-heading"><div><h2>数据库结构变化</h2><p>独立于业务数据，只比较结构与授权元数据；变化同时进入统一审核与发布阻断。</p></div>' + sevBadge(diff.highest_risk) + '</div>' + items.map(function (item) { return '<div class="db-drift-row ' + (SEV_CLASS[item.severity] || 'info') + '">' + sevBadge(item.severity) + '<span class="badge muted">' + esc(driftKindText(item.action)) + '</span><div><b>' + esc(item.id) + '</b><small>' + esc(databaseKindText(item.kind)) + '</small></div></div>'; }).join('') + '</div>';
+  }
+
   function renderDatabase(ctx) {
     var el = document.getElementById("tab-database");
     var database = ctx.database;
@@ -404,19 +521,23 @@
     var schemas = database.schemas || [];
     var tables = [];
     schemas.forEach(function (schema) { (schema.tables || []).forEach(function (table) { tables.push(table); }); });
-    var html = '<div class="page-head compact"><div><span class="eyebrow">数据库元数据</span><h1>数据库结构</h1><p>只读查看 Schema、字段、索引、权限与逻辑对象，不采集业务表数据。</p></div></div><div class="cards"><div class="card"><h3>数据库</h3><div class="big">' + esc(database.engine) + '</div><dl><dt>服务版本</dt><dd>' + esc(database.server_version || '-') + '</dd><dt>采集时间</dt><dd>' + fmtTime(database.collected_at) + '</dd></dl></div>' +
-      '<div class="card"><h3>结构对象</h3><div class="big">' + tables.length + ' 张表</div><dl><dt>Schema</dt><dd>' + schemas.length + '</dd><dt>索引</dt><dd>' + (database.indexes || []).length + '</dd><dt>视图</dt><dd>' + (database.views || []).length + '</dd><dt>触发器</dt><dd>' + (database.triggers || []).length + '</dd></dl></div>' +
-      '<div class="card"><h3>权限与逻辑</h3><div class="big">' + (database.privileges || []).length + ' 项权限</div><dl><dt>函数/过程</dt><dd>' + (database.routines || []).length + '</dd><dt>采集警告</dt><dd>' + (database.warnings || []).length + '</dd></dl></div></div>';
+    var constraints = database.constraints || [], roles = database.roles || [];
+    var html = '<div class="page-head compact"><div><span class="eyebrow">数据库元数据 v2</span><h1>数据库结构与授权</h1><p>通过只读事务查看结构、依赖和授权，不执行任何业务表数据查询。</p></div><div class="capture"><span>数据库</span><strong>' + esc(database.database_name || database.engine) + '</strong><span>' + fmtTime(database.collected_at) + '</span></div></div><div class="db-safety"><i data-lucide="shield-check"></i><div><b>只读元数据边界</b><span>仅访问 information_schema、系统目录和授权视图，不读取业务记录。</span></div></div><div class="cards"><div class="card"><h3>数据库</h3><div class="big">' + esc(database.engine) + '</div><dl><dt>名称</dt><dd>' + esc(database.database_name || '-') + '</dd><dt>服务版本</dt><dd>' + esc(database.server_version || '-') + '</dd></dl></div>' +
+      '<div class="card"><h3>结构对象</h3><div class="big">' + tables.length + ' 张表</div><dl><dt>架构</dt><dd>' + schemas.length + '</dd><dt>约束</dt><dd>' + constraints.length + '</dd><dt>索引</dt><dd>' + (database.indexes || []).length + '</dd><dt>视图</dt><dd>' + (database.views || []).length + '</dd></dl></div>' +
+      '<div class="card"><h3>授权与逻辑</h3><div class="big">' + (database.privileges || []).length + ' 项权限</div><dl><dt>角色 / 用户</dt><dd>' + roles.length + '</dd><dt>函数 / 过程</dt><dd>' + (database.routines || []).length + '</dd><dt>采集警告</dt><dd>' + (database.warnings || []).length + '</dd></dl></div></div>';
+    html += databaseDriftPanel(ctx.databaseDiff);
     html += '<div class="database-browser"><aside><span class="eyebrow">模式列表</span>' + schemas.map(function (schema) { return '<button type="button" class="schema-link" data-scroll-schema="db-' + esc(schema.name) + '"><b>' + esc(schema.name) + '</b><span>' + (schema.tables || []).length + ' 张表</span></button>'; }).join('') + '</aside><div class="schema-list">';
     if (!tables.length) html += '<div class="notice">没有用户表。</div>';
     schemas.forEach(function (schema, schemaIndex) {
       html += '<section id="db-' + esc(schema.name) + '"><div class="schema-head"><div><span class="eyebrow">模式</span><h2>' + esc(schema.name) + '</h2></div><span>' + (schema.tables || []).length + ' 张表</span></div>';
       (schema.tables || []).forEach(function (table, tableIndex) {
-        html += '<details class="db-table" ' + (schemaIndex === 0 && tableIndex === 0 ? 'open' : '') + '><summary><span><b>' + esc(table.name) + '</b><small>' + (table.columns || []).length + ' 个字段</small></span><em>查看结构</em></summary><div class="tablewrap"><table><thead><tr><th>字段</th><th>类型</th><th>可空</th><th>默认值</th></tr></thead><tbody>' + (table.columns || []).map(function (column) { return '<tr><td class="mono">' + esc(column.name) + '</td><td class="mono">' + esc(column.data_type) + '</td><td>' + (column.nullable ? '是' : '<span class="badge warn">NOT NULL</span>') + '</td><td class="mono">' + esc(column.default || '-') + '</td></tr>'; }).join('') + '</tbody></table></div></details>';
+        var tableConstraints = constraints.filter(function (item) { return item.schema === schema.name && item.table === table.name; });
+        html += '<details class="db-table" ' + (schemaIndex === 0 && tableIndex === 0 ? 'open' : '') + '><summary><span><b>' + esc(table.name) + '</b><small>' + (table.columns || []).length + ' 个字段 · ' + tableConstraints.length + ' 个约束</small></span><em>查看结构</em></summary><div class="tablewrap"><table><thead><tr><th>字段</th><th>类型</th><th>可空</th><th>默认值</th></tr></thead><tbody>' + (table.columns || []).map(function (column) { return '<tr><td class="mono">' + esc(column.name) + '</td><td class="mono">' + esc(column.data_type) + '</td><td>' + (column.nullable ? '是' : '<span class="badge warn">NOT NULL</span>') + '</td><td class="mono">' + esc(column.default || '-') + '</td></tr>'; }).join('') + '</tbody></table></div>' + (tableConstraints.length ? '<div class="constraint-list">' + tableConstraints.map(function (item) { return '<div><span class="badge info">' + esc(item.type) + '</span><b>' + esc(item.name) + '</b><code>' + esc((item.columns || []).join(', ')) + (item.reference_table ? ' → ' + item.reference_schema + '.' + item.reference_table + '(' + (item.reference_columns || []).join(', ') + ')' : '') + '</code></div>'; }).join('') + '</div>' : '') + '</details>';
       });
       html += '</section>';
     });
     html += '</div></div>';
+    html += '<section class="db-catalog"><div class="section-heading"><div><h2>完整对象目录</h2><p>以下对象同样进入数据库漂移比较。</p></div></div>' + databaseObjectTable('索引', database.indexes || [], 'list-tree') + databaseObjectTable('视图', database.views || [], 'panels-top-left') + databaseObjectTable('触发器', database.triggers || [], 'zap') + databaseObjectTable('函数与过程', database.routines || [], 'braces') + databaseObjectTable('角色与用户', roles, 'users') + databaseObjectTable('权限', database.privileges || [], 'key-round') + '</section>';
     if ((database.warnings || []).length) html += '<div class="notice warning-notice monitor-gap">' + database.warnings.map(esc).join('<br>') + '</div>';
     el.innerHTML = html;
   }
@@ -582,8 +703,9 @@
 
   function renderTab(tab) {
     if (!currentCtx) return;
-    ({ overview: renderOverview, resources: renderResources, ports: renderPorts, monitoring: renderMonitoring, database: renderDatabase, drift: renderDrift })[tab](currentCtx);
+	({ overview: renderOverview, applications: renderApplications, resources: renderResources, ports: renderPorts, monitoring: renderMonitoring, database: renderDatabase, drift: renderDrift })[tab](currentCtx);
     dirtyTabs[tab] = false;
+	refreshIcons();
   }
 
   function updateDriftBadge(ctx) {
@@ -610,7 +732,7 @@
 
   /* ---------- 标签页 ---------- */
   function activateTab(tab, updateHash) {
-    if (!["overview", "resources", "ports", "monitoring", "database", "drift"].includes(tab)) tab = "overview";
+    if (!["overview", "applications", "resources", "ports", "monitoring", "database", "drift"].includes(tab)) tab = "overview";
     currentTab = tab;
     if (currentCtx && dirtyTabs[tab]) renderTab(tab);
     document.querySelectorAll("#tabs button").forEach(function (button) {
@@ -649,10 +771,7 @@
       var open = event.target.closest("[data-open-resource]");
       if (open) {
         selectedResourceId = open.getAttribute("data-open-resource");
-        resFilter.q = selectedResourceId;
-        resFilter.type = "all";
-        if (currentCtx) renderResources(currentCtx);
-        activateTab("resources", true);
+		openResourceDrawer(selectedResourceId);
       }
       var schema = event.target.closest("[data-scroll-schema]");
       if (schema) document.getElementById(schema.getAttribute("data-scroll-schema"))?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -662,16 +781,14 @@
       if (promote) openPromote(promote);
       var driftChoice = event.target.closest("[data-drift-filter]");
       if (driftChoice) { driftFilter = driftChoice.getAttribute("data-drift-filter"); renderDrift(currentCtx); }
+	  if (event.target.closest("[data-expand-risks]")) { overviewRiskExpanded = true; renderOverview(currentCtx); refreshIcons(); }
       if (event.target.closest("[data-copy-config]") && monitoringConfigText) {
         navigator.clipboard.writeText(monitoringConfigText).then(function () { showToast("FleetScope 配置已复制"); }).catch(function () { showToast("浏览器不允许访问剪贴板", true); });
       }
       if (event.target.closest("[data-export-config]") && monitoringConfigText) {
         var url = URL.createObjectURL(new Blob([monitoringConfigText + "\n"], { type: "application/json" }));
-        var link = document.createElement("a"); link.href = url; link.download = "applications.json"; link.click(); URL.revokeObjectURL(url); showToast("applications.json 已导出");
+		var link = document.createElement("a"); link.href = url; link.download = "applications.json"; link.click(); window.setTimeout(function () { URL.revokeObjectURL(url); }, 1000); showToast("applications.json 已导出");
       }
-    });
-    document.addEventListener("keydown", function (event) {
-      if ((event.key === "Enter" || event.key === " ") && event.target.matches("tr[data-open-resource]")) { event.preventDefault(); event.target.click(); }
     });
     window.addEventListener("popstate", function () { activateTab((location.hash.split("/")[1] || "overview"), false); });
     activateTab((location.hash.split("/")[1] || "overview"), false);
@@ -740,8 +857,10 @@
   }
 
   initTabs();
+	refreshIcons();
   document.getElementById("refresh").addEventListener("click", loadData);
   document.getElementById("retry").addEventListener("click", loadData);
+	document.getElementById("resource-close").addEventListener("click", function () { document.getElementById("resource-dialog").close(); });
   document.getElementById("review-close").addEventListener("click", function () { document.getElementById("review-dialog").close(); });
   document.getElementById("review-cancel").addEventListener("click", function () { document.getElementById("review-dialog").close(); });
   document.getElementById("review-classification").addEventListener("change", toggleReviewExpiry);
@@ -755,7 +874,7 @@
     var submit = document.getElementById("review-submit");
     submit.disabled = true;
     setFormError("review-error", "");
-    apiMutation("/api/reviews/" + encodeURIComponent(fingerprint), { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).then(function () {
+    apiMutation("/api/reviews/" + encodeURIComponent(fingerprint), { method: "PATCH", headers: { "Content-Type": "application/json", "X-InfraScout-Action": "1" }, body: JSON.stringify(body) }).then(function () {
       document.getElementById("review-dialog").close();
       lastETag = "";
       showToast("审核记录已保存");
@@ -771,7 +890,7 @@
     var submit = document.getElementById("promote-submit");
     submit.disabled = true;
     setFormError("promote-error", "");
-    apiMutation("/api/reviews/" + encodeURIComponent(fingerprint) + "/promote", { method: "POST" }).then(function () {
+    apiMutation("/api/reviews/" + encodeURIComponent(fingerprint) + "/promote", { method: "POST", headers: { "X-InfraScout-Action": "1" } }).then(function () {
       document.getElementById("promote-dialog").close();
       lastETag = "";
       showToast("已将这一条变化提升到基线");

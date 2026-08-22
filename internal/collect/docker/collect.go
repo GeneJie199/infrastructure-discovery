@@ -53,7 +53,12 @@ func ApplyInspect(containers []Container, data []byte) error {
 		NetworkSettings struct {
 			Networks map[string]any `json:"Networks"`
 		} `json:"NetworkSettings"`
-		Mounts []struct{ Type, Source, Destination, Mode string } `json:"Mounts"`
+		Mounts     []struct{ Type, Source, Destination, Mode string } `json:"Mounts"`
+		HostConfig struct {
+			RestartPolicy struct {
+				Name string `json:"Name"`
+			} `json:"RestartPolicy"`
+		} `json:"HostConfig"`
 	}
 	if err := json.Unmarshal(data, &rows); err != nil {
 		return fmt.Errorf("docker inspect output: %w", err)
@@ -68,6 +73,7 @@ func ApplyInspect(containers []Container, data []byte) error {
 			continue
 		}
 		containers[i].RestartCount = x.RestartCount
+		containers[i].RestartPolicy = x.HostConfig.RestartPolicy.Name
 		if x.State.Health != nil {
 			containers[i].Health = x.State.Health.Status
 		}
