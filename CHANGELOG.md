@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.0 - 2026-08-23
+
+- Deliver zero-configuration Linux discovery, normalized infrastructure and relationship evidence, approved/desired/observed state, structured drift review, and release blocking.
+- Complete read-only PostgreSQL/MySQL metadata v2 for schemas, constraints, indexes, views, triggers, routines, roles, and privileges without business-row collection.
+- Add checksum-verifying install/doctor/uninstall/purge scripts, complete platform archives, external-user onboarding, fuzz/security gates, CycloneDX SBOM, and GitHub provenance.
+
 ## 0.4.0 - 2026-08-23
 
 - Add `infrascout up` for one-command discovery, state initialization, drift refresh, local serving, and browser launch.

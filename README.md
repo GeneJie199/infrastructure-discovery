@@ -5,7 +5,15 @@ Linux 基础设施发现与漂移检测工具。它把主机上实际运行的�
 [![CI](https://github.com/GeneJie199/infrastructure-discovery/actions/workflows/ci.yml/badge.svg)](https://github.com/GeneJie199/infrastructure-discovery/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
-## 可交付能力
+## Screenshot
+
+![InfraScout infrastructure risk dashboard](https://raw.githubusercontent.com/GeneJie199/ai-devops-open-suite/main/assets/infrascout-risk.png)
+
+## Why
+
+Deployment documents say what should exist; incidents happen against what actually exists. InfraScout creates a read-only, evidence-backed inventory, lets a human approve the baseline, and turns later infrastructure or database changes into reviewable drift.
+
+## Core Features
 
 - 主机、CPU、内存、磁盘、网络接口、进程、监听端口和 systemd 服务发现。
 - `infrascout up` 一条命令完成首次扫描、批准基线、当前态、漂移报告、本地 Viewer 和自动打开浏览器。
@@ -18,7 +26,7 @@ Linux 基础设施发现与漂移检测工具。它把主机上实际运行的�
 - 密钥、Token、常见密码变量和带凭据 URL 脱敏。
 - 响应式中文 Web 查看器包含应用聚合、资源详情抽屉、关系证据、数据库漂移和 Observed/Approved/Desired 状态模型；无 Node/CDN 运行依赖。
 
-## 快速开始
+## Quick Start
 
 需要 Go 1.26.6+。Linux 可实机采集，Windows/macOS 可用仓库夹具验证全部确定性逻辑。
 
@@ -30,7 +38,89 @@ sudo ./infrascout up --state-dir /var/lib/infrascout
 命令会自动打开 `http://127.0.0.1:8765/`。第一次运行创建批准基线，以后运行刷新当前事实和漂移。试用内置完整样例可执行 `./infrascout serve --demo`。
 无图形界面的服务器增加 `--no-open`，再通过 SSH 隧道访问本地 Viewer。
 
-发布包同时提供 `install.sh` 与 systemd unit。只安装二进制执行 `sudo ./install.sh ./infrascout-linux-amd64`；同时安装并启用后台服务执行 `sudo INSTALL_SERVICE=1 ./install.sh ./infrascout-linux-amd64`，完成首次 `up` 后再启动服务。
+发布包同时提供安装器与 systemd unit。只安装二进制执行 `sudo sh scripts/install.sh install ./infrascout`；需要安装并启用 systemd unit 时增加 `INSTALL_SERVICE=1`，首次 `up` 建立基线后再启动持续服务。
+
+## Online Install
+
+Install and start the complete Open Suite, including InfraScout, with one command:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/GeneJie199/ai-devops-open-suite/main/scripts/bootstrap.sh | bash
+```
+
+```powershell
+irm https://raw.githubusercontent.com/GeneJie199/ai-devops-open-suite/main/scripts/bootstrap.ps1 | iex
+```
+
+For InfraScout alone, download the archive for your platform from [Releases](https://github.com/GeneJie199/infrastructure-discovery/releases/latest), extract it, and run the included installer. Linux is the verified native discovery platform; Windows and macOS builds support deterministic file review and demo viewing but do not claim native host discovery parity.
+
+## Offline Install
+
+On an online machine, download the matching `infrascout-<version>-<os>-<arch>` archive and `checksums.txt`. Transfer both, extract, then run:
+
+```bash
+sudo sh scripts/install.sh install ./infrascout ./checksums.txt
+```
+
+```powershell
+.\scripts\install.ps1 -Action Install -Source .\infrascout.exe -Checksums .\checksums.txt
+```
+
+The full Open Suite offline bundle contains the binary, installer, protocol schemas, manifest, and checksums for a network-free install.
+
+## First Five Minutes
+
+1. Run `sudo infrascout up --state-dir /var/lib/infrascout` on the Linux host.
+2. Review warnings and discovered public listeners before accepting the initial baseline.
+3. Open `http://127.0.0.1:8765/` locally or through an SSH tunnel.
+4. Make a controlled service, port, image, or configuration change.
+5. Run `sudo infrascout check --state-dir /var/lib/infrascout --fail-on warning` and classify the drift.
+
+## AI Optional
+
+InfraScout discovery, stable identities, database metadata, drift, risk, review, and reports are deterministic and require no AI account. Other suite modules may explain its evidence, but AI cannot alter a baseline or change classification without an explicit user action.
+
+## Comparison
+
+| Tool category | Primary job | InfraScout's role |
+|---|---|---|
+| Configuration management | Apply desired configuration | Observes actual state without applying changes |
+| CMDB / inventory | Curated asset records | Produces a local, evidence-backed snapshot directly from the host |
+| Vulnerability scanners | Find known security weaknesses | Detects structural exposure and drift; it is not a CVE scanner |
+| Monitoring agents | Track runtime health | Discovers deployment structure and baseline change for FleetScope |
+
+## Architecture
+
+```mermaid
+flowchart LR
+  H[Linux host and config] --> C[Read-only collectors]
+  C --> I[Typed inventory]
+  I --> S[Stable snapshot]
+  B[Approved / desired baseline] --> D[Deterministic diff]
+  S --> D
+  D --> V[Viewer and lifecycle artifacts]
+```
+
+Collectors never import another product's internals. Inventory, snapshots, drift, evidence, and monitoring recommendations are versioned files that FleetScope and ReleaseGuard can consume.
+
+## Security
+
+- Collection is local and read-only; database collectors use read-only transactions and never query business rows.
+- The Viewer is loopback-only by default, and remote mode disables mutation APIs.
+- Credentials come from environment variables and common secret forms are redacted.
+- Releases include SHA-256 checksums, a CycloneDX SBOM, and GitHub build provenance.
+
+See [SECURITY.md](SECURITY.md) and [docs/operations.md](docs/operations.md).
+
+## Roadmap
+
+The v1.0 scope prioritizes high-quality Linux, systemd, Docker, Nginx, PostgreSQL, and MySQL discovery. Additional platforms and collectors are tracked in the [Open Suite roadmap](https://github.com/GeneJie199/ai-devops-open-suite/blob/main/ROADMAP.md) only after they can meet the same evidence standard.
+
+## Contributing
+
+Read [CONTRIBUTING.md](CONTRIBUTING.md). New collectors need typed fixtures, deterministic IDs, malformed-input tests, and documented privilege boundaries. Security reports follow [SECURITY.md](SECURITY.md).
+
+## Product Reference
 
 ## 生产工作流
 
@@ -109,7 +199,7 @@ database:{engine}:{host}/{sourceHash}
 relationship:{source+type+targetHash}
 ```
 
-## 安全与运行边界
+## Known Limitations and Runtime Boundaries
 
 - Viewer 默认拒绝非 loopback 地址；远程访问优先用 SSH 隧道。
 - `--allow-remote` 仅适用于已配置身份认证的反向代理和严格网络策略；远程监听时审核和基线提升 API 会被服务端强制禁用，启动日志会明确显示这一安全边界。
