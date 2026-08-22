@@ -12,3 +12,13 @@ func TestParse(t *testing.T) {
 		t.Fatalf("containers = %+v", got)
 	}
 }
+
+func FuzzParse(f *testing.F) {
+	f.Add([]byte(`{"ID":"abc","Names":"api","Image":"example/api:1","State":"running"}` + "\n"))
+	f.Add([]byte("not-json\n"))
+	f.Add([]byte{})
+	f.Fuzz(func(t *testing.T, data []byte) {
+		_, _ = Parse(data)
+		_ = ApplyInspect(nil, data)
+	})
+}

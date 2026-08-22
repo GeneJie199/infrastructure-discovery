@@ -1,0 +1,7 @@
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Synthetic authorization header used to verify redaction"
+targetRules = ["curl-auth-header"]
+paths = ['''^internal/redact/redact_test\.go$''']
