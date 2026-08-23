@@ -56,7 +56,7 @@ For InfraScout alone, download the archive for your platform from [Releases](htt
 
 ## Offline Install
 
-On an online machine, download the matching `infrascout-<version>-<os>-<arch>` archive and `checksums.txt`. Transfer both, extract, then run:
+On an online machine, download the matching `infrascout-<version>-<os>-<arch>` archive and release-level `checksums.txt`, and verify the archive before transfer. Extract it; the archive's own `checksums.txt` covers the platform-local `infrascout` binary used below:
 
 ```bash
 sudo sh scripts/install.sh install ./infrascout ./checksums.txt

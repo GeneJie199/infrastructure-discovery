@@ -5,6 +5,7 @@
 - Deliver zero-configuration Linux discovery, normalized infrastructure and relationship evidence, approved/desired/observed state, structured drift review, and release blocking.
 - Complete read-only PostgreSQL/MySQL metadata v2 for schemas, constraints, indexes, views, triggers, routines, roles, and privileges without business-row collection.
 - Add checksum-verifying install/doctor/uninstall/purge scripts, complete platform archives, external-user onboarding, fuzz/security gates, CycloneDX SBOM, and GitHub provenance.
+- Include and build-verify a platform-local binary checksum inside every standalone archive.
 
 ## 0.4.0 - 2026-08-23
 
