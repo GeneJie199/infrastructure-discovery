@@ -1,9 +1,18 @@
 # InfraScout
 
+
+## v2 development and licensing
+
+Stable: v1.x (historical Apache-2.0 releases). Under development: v2 AI Engineering Team; not GA.
+
+Community Edition: **AGPL-3.0-only** for this development source. Historical release rights remain valid.
+Commercial / OEM licensing available for closed-source redistribution, white-labeling, embedding and other use cases incompatible with AGPL. See [license policy](LICENSE_POLICY.md), [history](LICENSING_HISTORY.md) and [commercial policy](COMMERCIAL_LICENSE.md).
+
+
 Linux 基础设施发现与漂移检测工具。它把主机上实际运行的资源采成稳定清单，建立人工认可的基线，并在发布前后给出确定性变化和风险。
 
 [![CI](https://github.com/GeneJie199/infrastructure-discovery/actions/workflows/ci.yml/badge.svg)](https://github.com/GeneJie199/infrastructure-discovery/actions/workflows/ci.yml)
-[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
 
 ## Screenshot
 
@@ -209,4 +218,4 @@ relationship:{source+type+targetHash}
 
 安装、systemd、备份和退出码见 [docs/operations.md](docs/operations.md)。
 
-Apache-2.0。贡献流程见 [CONTRIBUTING.md](CONTRIBUTING.md)，安全问题见 [SECURITY.md](SECURITY.md)。
+AGPL-3.0-only。贡献流程见 [CONTRIBUTING.md](CONTRIBUTING.md)，安全问题见 [SECURITY.md](SECURITY.md)。
