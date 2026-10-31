@@ -10,3 +10,7 @@
 *.yml text eol=lf
 *.yaml text eol=lf
 Makefile text eol=lf
+
+LICENSES/** -text
+LICENSE text eol=lf
+internal/team/AGPL-3.0-only.txt text eol=lf

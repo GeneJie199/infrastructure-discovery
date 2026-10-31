@@ -7,3 +7,6 @@
 5. Preserve stable resource IDs and JSON compatibility unless the change is explicitly documented as breaking.
 
 Linux collectors should degrade gracefully when optional tools or permissions are unavailable. Add fixture coverage when a change can be reproduced without a live Linux host.
+
+
+For v2 copyrightable contributions, read [CONTRIBUTOR_POLICY.md](CONTRIBUTOR_POLICY.md). A reviewed CLA appropriate for dual licensing is required before accepting new third-party code; DCO alone is not a commercial relicensing grant.
