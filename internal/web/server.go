@@ -298,6 +298,10 @@ func (s *Server) Handler() http.Handler {
 		w.Header().Set("X-Frame-Options", "DENY")
 		w.Header().Set("Referrer-Policy", "no-referrer")
 		w.Header().Set("Content-Security-Policy", "default-src 'self'; style-src 'self'; script-src 'self'; connect-src 'self'")
+		if !localBrowserRequest(r) {
+			http.Error(w, "non-local Host or cross-site request refused", http.StatusForbidden)
+			return
+		}
 		s.mux.ServeHTTP(w, r)
 	})
 }
