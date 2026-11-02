@@ -535,7 +535,7 @@ dialog::backdrop { background: rgba(1,4,9,.72); }
   .route-card > .icon-command { grid-column: 1 / -1; width: 100%; color: var(--accent); }
   .constraint-list > div { grid-template-columns: auto minmax(0, 1fr); }
   .constraint-list code { grid-column: 1 / -1; }
-  .resource-dialog { width: 100vw; }
+  .resource-dialog { width: 100%; max-width: 100%; box-sizing: border-box; margin-inline: 0; }
   .resource-body { padding: 14px 14px 24px; }
   .fact-grid { grid-template-columns: 1fr; }
   .drawer-section .kv { grid-template-columns: 1fr; gap: 2px; }
