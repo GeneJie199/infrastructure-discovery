@@ -91,3 +91,7 @@ Restore onto the same or a replacement host only after reviewing the hostname an
 ## Baseline policy
 
 Do not automatically replace `baseline.json` after every deployment. Run `baseline` only after a human or release pipeline has reviewed and accepted the reported drift.
+
+## Runtime diagnostics
+
+`GET /api/diagnostics/runtime` provides read-only process diagnostics through the existing web listener and Host/Origin protections. Responses disable caching and contain only `goroutines`, `heapAllocBytes`, `heapSysBytes`, `heapInuseBytes`, `systemBytes`, `gcCount`, and `uptimeSeconds`. Values come from the live Go runtime; uptime is measured from package initialization. No environment, configuration, paths, stacks, or process commands are exposed. This endpoint is observational and does not establish business readiness.
