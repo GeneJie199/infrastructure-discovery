@@ -226,6 +226,7 @@ func validate(b []byte, into any) error {
 
 func (s *Server) routes() *http.ServeMux {
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/diagnostics/runtime", handleRuntimeDiagnostics)
 	mux.HandleFunc("/api/data", s.handleData)
 	mux.HandleFunc("PATCH /api/reviews/{fingerprint}", s.handleReview)
 	mux.HandleFunc("POST /api/reviews/{fingerprint}/promote", s.handlePromote)
