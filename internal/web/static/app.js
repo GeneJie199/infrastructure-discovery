@@ -157,10 +157,6 @@
 
   function renderApplications(ctx) {
     var el = document.getElementById("tab-applications");
-    var composition = [["进程",ctx.byType.process.length],["监听端口",ctx.byType.endpoint.length],["服务",ctx.byType.service.length]];
-    var compositionMax = Math.max.apply(null, composition.map(function(item) { return item[1]; }).concat([1]));
-    html += '<section class="dashboard-panel composition-panel"><div class="panel-head"><div><span class="eyebrow">资产构成</span><h2>当前采集分布</h2></div><button class="link-btn" data-jump="resources">查看资产</button></div><div class="composition-bars">' + composition.map(function(item,index) { return '<div class="composition-row"><span>' + esc(item[0]) + '</span><div class="composition-track"><i style="width:' + (item[1] / compositionMax * 100) + '%;background:var(--ui-chart-' + (index+1) + ')"></i></div><b>' + item[1] + '</b></div>'; }).join('') + '</div></section>';
-
     var applications = applicationList(ctx);
     var html = '<div class="page-head compact"><div><span class="eyebrow">工作负载视角</span><h1>机器里运行着什么</h1><p>按应用聚合进程、部署、端口、依赖和可复核证据，低置信识别会明确标记为待确认。</p></div><div class="capture"><span>识别结果</span><strong>' + applications.length + ' 个应用</strong></div></div>';
     if (!applications.length) {
@@ -207,7 +203,7 @@
 
     var composition = [["进程",ctx.byType.process.length],["监听端口",ctx.byType.endpoint.length],["服务",ctx.byType.service.length]];
     var compositionMax = Math.max.apply(null, composition.map(function(item) { return item[1]; }).concat([1]));
-    html += '<section class="dashboard-panel composition-panel"><div class="panel-head"><div><span class="eyebrow">资产构成</span><h2>当前采集分布</h2></div><button class="link-btn" data-jump="resources">查看资产</button></div><div class="composition-bars">' + composition.map(function(item,index) { return '<div class="composition-row"><span>' + esc(item[0]) + '</span><div class="composition-track"><i style="width:' + (item[1] / compositionMax * 100) + '%;background:var(--ui-chart-' + (index+1) + ')"></i></div><b>' + item[1] + '</b></div>'; }).join('') + '</div></section>';
+    html += '<section class="dashboard-panel composition-panel"><div class="panel-head"><div><span class="eyebrow">资产构成</span><h2>当前采集分布</h2></div><button class="link-btn" data-jump="resources">查看资产</button></div><div class="composition-bars">' + composition.map(function(item,index) { return '<div class="composition-row"><span>' + esc(item[0]) + '</span><div class="composition-track"><svg viewBox="0 0 100 10" preserveAspectRatio="none" aria-hidden="true"><rect width="' + (item[1] / compositionMax * 100).toFixed(3) + '" height="10" rx="5" class="series-' + index + '"></rect></svg></div><b>' + item[1] + '</b></div>'; }).join('') + '</div></section>';
 
     var applications = applicationList(ctx);
     html += '<section class="home-applications"><div class="panel-head"><div><span class="eyebrow">应用视角</span><h2>机器里运行着什么</h2></div><button class="link-btn" data-jump="applications">全部应用 <i data-lucide="arrow-right"></i></button></div>';

@@ -573,7 +573,10 @@ dialog::backdrop { background: rgba(1,4,9,.72); }
 .composition-row { display:grid; grid-template-columns:80px minmax(0,1fr) 50px; gap:14px; align-items:center; }
 .composition-row > b { text-align:right; font-variant-numeric:tabular-nums; }
 .composition-track { height:9px; border-radius:8px; overflow:hidden; background:var(--ui-grid); margin-top:8px; min-width:60px; }
-.composition-track > i { display:block; height:100%; border-radius:inherit; }
+.composition-track > svg { display:block; width:100%; height:100%; }
+.composition-track .series-0 { fill:var(--ui-chart-1); }
+.composition-track .series-1 { fill:var(--ui-chart-2); }
+.composition-track .series-2 { fill:var(--ui-chart-3); }
 .resource-item { flex:1; min-width:130px; }
 
 :root[data-suite-theme="dark"] :is(.application-icon,.start-panel-mark,.chart-legend i,.chart-series-number,.chart-series-marker,.dialog-actions #review-submit,.dialog-actions .danger-command,.confirming) { color:var(--ui-bg); }
